@@ -143,6 +143,11 @@ public class EnhancerMenu extends AbstractContainerMenu {
         if (stack.isEmpty() || stack.is(Items.ENCHANTED_BOOK)) {
             return false;
         }
+        // 强化器自身不能当被强化对象：它一旦被强化，
+        // 次数就会记在"工具"上，而工具本身没有附魔，会卡在半成品状态
+        if (stack.getItem() instanceof EnchantEnhancerItem) {
+            return false;
+        }
         return !stack.getEnchantments().isEmpty();
     }
 
@@ -346,7 +351,9 @@ public class EnhancerMenu extends AbstractContainerMenu {
 
         // 强化成功：清零本次进度、记一次次数
         stack.set(SmallTools.ENHANCE_FILL.get(), 0);
-        stack.set(SmallTools.ENHANCE_COUNT.get(), enhanceCount(stack) + 1);
+        // 用 min 夹一次：万一有别的路径把次数写超了，也别让它越过 5
+        int nextCount = Math.min(MAX_ENHANCES, enhanceCount(stack) + 1);
+        stack.set(SmallTools.ENHANCE_COUNT.get(), nextCount);
 
         lastResult = filled
                 ? "screen.smalltools.enhancer.filled"

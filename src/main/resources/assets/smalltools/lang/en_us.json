@@ -78,5 +78,8 @@
   "screen.smalltools.enhancer.xp": "Enhancement XP: %s / %s",
   "screen.smalltools.enhancer.invested": "Invested — the bar is full",
   "screen.smalltools.enhancer.ready": "XP full — ready to enhance",
-  "screen.smalltools.enhancer.not_ready": "Not enough XP yet"
+  "screen.smalltools.enhancer.not_ready": "Not enough XP yet",
+  "tooltip.smalltools.enhanced": "Enhanced %s / %s",
+  "tooltip.smalltools.enhanced.maxed": "Maximum enhancements reached",
+  "tooltip.smalltools.enhanced.next": "Next: %s XP (%s Liquid Lapis)"
 }

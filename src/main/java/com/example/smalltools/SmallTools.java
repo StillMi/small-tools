@@ -213,6 +213,14 @@ public class SmallTools {
         // 传送不能在 entityInside 里就地执行（会被 handleMovePlayer 的位置纠偏拉回去），
         // 统一排到 tick 末尾，见 PortalTeleports
         NeoForge.EVENT_BUS.addListener(PortalTeleports::onServerTickPost);
+        // 强化次数写在任意物品上，不可能给每个物品都加 tooltip 钩子，
+        // 所以统一走这个事件
+        NeoForge.EVENT_BUS.addListener(SmallTools::onItemTooltip);
+    }
+
+    /** 把强化次数追加到物品说明里（任意物品都适用）。 */
+    private static void onItemTooltip(net.neoforged.neoforge.event.entity.player.ItemTooltipEvent event) {
+        com.example.smalltools.item.EnhanceTooltip.append(event.getItemStack(), event.getToolTip());
     }
 
     /** 客户端改坐标 → 服务端落库。 */

@@ -78,5 +78,8 @@
   "screen.smalltools.enhancer.xp": "强化经验：%s / %s",
   "screen.smalltools.enhancer.invested": "已投入，经验条已充满",
   "screen.smalltools.enhancer.ready": "经验已满，可以强化了",
-  "screen.smalltools.enhancer.not_ready": "经验还没攒满"
+  "screen.smalltools.enhancer.not_ready": "经验还没攒满",
+  "tooltip.smalltools.enhanced": "已强化 %s / %s 次",
+  "tooltip.smalltools.enhanced.maxed": "已达强化上限，无法继续强化",
+  "tooltip.smalltools.enhanced.next": "下一次需要 %s 经验（%s 颗液态青金）"
 }

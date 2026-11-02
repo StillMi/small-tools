@@ -57,13 +57,10 @@
   "screen.smalltools.wash.luck.ready": "Wash luck: FULL — next roll is max level",
   "tooltip.smalltools.wash_stone.lore": "Said to be cut from the obsidian beneath an enchanting table, never once disturbed by hand — hold it close and you can hear old enchantments peeling away...",
   "item.smalltools.enchant_enhancer": "Enchantment Enhancer",
-  "item.smalltools.condensed_lapis": "Condensed Lapis",
   "container.smalltools.enhancer": "Enchantment Enhancing",
   "tooltip.smalltools.enhancer": "Consumes Condensed Lapis to strengthen a random enchantment",
   "tooltip.smalltools.enhancer.hint": "Adds a level-1 enchantment first while below three",
   "tooltip.smalltools.enhancer.lore": "The pedestal remembers every enhancement, and asks for more each time...",
-  "tooltip.smalltools.condensed_lapis": "Material required for enchantment enhancing",
-  "tooltip.smalltools.condensed_lapis.lore": "Lapis pressed for a thousand years in the heart of stone, hardened into a single shard...",
   "screen.smalltools.enhancer.button": "Enhance",
   "screen.smalltools.enhancer.insert": "Insert an enchanted item",
   "screen.smalltools.enhancer.have": "Condensed Lapis: %s",
@@ -73,5 +70,13 @@
   "screen.smalltools.enhancer.no_material": "Not enough Condensed Lapis",
   "screen.smalltools.enhancer.cost": "Cost: %s × Condensed Lapis",
   "screen.smalltools.enhancer.progress": "Enhancements: %s / %s",
-  "screen.smalltools.enhancer.exhausted": "This item has reached its five-enhancement limit"
+  "screen.smalltools.enhancer.exhausted": "This item has reached its five-enhancement limit",
+  "item.smalltools.liquid_lapis": "Concentrated Liquid Lapis",
+  "tooltip.smalltools.liquid_lapis": "Enhancement fuel, smelted from lapis lazuli",
+  "tooltip.smalltools.liquid_lapis.lore": "Lapis melts in the flame and condenses into a vial of flowing deep blue...",
+  "screen.smalltools.enhancer.invest": "Invest ×1",
+  "screen.smalltools.enhancer.xp": "Enhancement XP: %s / %s",
+  "screen.smalltools.enhancer.invested": "Invested one Liquid Lapis",
+  "screen.smalltools.enhancer.ready": "XP full — ready to enhance",
+  "screen.smalltools.enhancer.not_ready": "Not enough XP yet"
 }

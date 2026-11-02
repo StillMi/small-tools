@@ -13,7 +13,7 @@
     },
     "has_the_recipe": {
       "conditions": {
-        "recipe": "smalltools:condensed_lapis"
+        "recipe": "smalltools:liquid_lapis_from_smelting"
       },
       "trigger": "minecraft:recipe_unlocked"
     }
@@ -26,7 +26,8 @@
   ],
   "rewards": {
     "recipes": [
-      "smalltools:condensed_lapis"
+      "smalltools:liquid_lapis_from_smelting",
+      "smalltools:liquid_lapis_from_blasting"
     ]
   }
 }

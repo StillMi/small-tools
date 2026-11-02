@@ -1,7 +1,7 @@
 package com.example.smalltools.menu;
 
 import com.example.smalltools.SmallTools;
-import com.example.smalltools.item.CondensedLapisItem;
+import com.example.smalltools.item.LiquidLapisItem;
 import com.example.smalltools.item.EnchantEnhancerItem;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
@@ -54,14 +54,14 @@ public class EnhancerMenu extends AbstractContainerMenu {
 
     public static final int PANEL_W = 200;
     /** 面板高度：比洗炼界面高，专门留给进度条和按钮。 */
-    public static final int PANEL_H = 268;
+    public static final int PANEL_H = 300;
     public static final int SLOT_U = (PANEL_W - 18) / 2;
     public static final int SLOT_V = 62;
     public static final int INV_U = (PANEL_W - 9 * 18) / 2;
     /** 物品栏放到底部，和按钮之间留足空隙，避免重叠。 */
-    public static final int INV_V = 226;
+    public static final int INV_V = 258;
     /** 强化按钮位置（面板内坐标）。 */
-    public static final int BUTTON_V = 196;
+    public static final int BUTTON_V = 232;
 
     /** 补足目标：物品上最多先凑到这么多条附魔。 */
     public static final int FILL_TO = 3;
@@ -70,19 +70,18 @@ public class EnhancerMenu extends AbstractContainerMenu {
     public static final int MAX_ENHANCES = 5;
 
     /**
-     * 第 n 次强化的凝造青金消耗（n 从 1 开始）。
+     * 完成第 n 次强化需要投入多少浓缩液态青金（n 从 1 开始）。
      *
-     * <p>曲线 1 / 3 / 6 / 10 / 15：差值是 2、3、4、5，递增幅度本身也在变大，
-     * 越往后越舍不得。之前写的是 {@code 1 + count}（1/2/3/4/5），
-     * 五次加起来才 15 个，压不住节奏。</p>
+     * <p>曲线 1 / 3 / 7 / 11 / 16，合计 38。差值是 2、4、4、5 ——
+     * 越往后越贵，符合"要价一次比一次高"。</p>
      */
     public static int costForStep(int step) {
         return switch (step) {
             case 1 -> 1;
             case 2 -> 3;
-            case 3 -> 6;
-            case 4 -> 10;
-            default -> 15;
+            case 3 -> 7;
+            case 4 -> 11;
+            default -> 16;
         };
     }
 
@@ -157,6 +156,11 @@ public class EnhancerMenu extends AbstractContainerMenu {
         return costForStep(count + 1);
     }
 
+    /** 这件物品当前已投入的强化经验。 */
+    public int fillOf(ItemStack stack) {
+        return stack.getOrDefault(SmallTools.ENHANCE_FILL.get(), 0);
+    }
+
     /** 这件装备的强化次数是否已经用满。 */
     public boolean isExhausted(ItemStack stack) {
         return enhanceCount(stack) >= MAX_ENHANCES;
@@ -167,12 +171,12 @@ public class EnhancerMenu extends AbstractContainerMenu {
         return Math.max(0, MAX_ENHANCES - enhanceCount(stack));
     }
 
-    /** 玩家手上的凝造青金总数。 */
+    /** 玩家手上的浓缩液态青金总数。 */
     public int lapisCount() {
         int total = 0;
         for (int i = 0; i < menuPlayer.getInventory().getContainerSize(); i++) {
             ItemStack s = menuPlayer.getInventory().getItem(i);
-            if (s.getItem() instanceof CondensedLapisItem) {
+            if (s.getItem() instanceof LiquidLapisItem) {
                 total += s.getCount();
             }
         }
@@ -207,6 +211,15 @@ public class EnhancerMenu extends AbstractContainerMenu {
         if (isExhausted(stack)) {
             return false;      // 五次用完，彻底停手
         }
+        if (!hasWork(stack)) {
+            return false;      // 所有附魔都满级且不需要补
+        }
+        // 进度攒满才算"可以强化"
+        return fillOf(stack) >= costFor(stack);
+    }
+
+    /** 这次强化是否还有实际可做的事（补附魔 or 升等级）。 */
+    public boolean hasWork(ItemStack stack) {
         return needsFill(stack) || hasUpgradable(stack);
     }
 
@@ -223,7 +236,45 @@ public class EnhancerMenu extends AbstractContainerMenu {
     // ------------------------------------------------------------------
 
     /**
-     * 执行一次强化。
+     * 投入一颗浓缩液态青金，为当前强化积攒经验。
+     *
+     * <p>不再"点一下就强化"，要先投满进度。投入的进度存在物品上，
+     * 中途关界面不会白费。</p>
+     *
+     * @return 是否投入成功
+     */
+    public boolean invest(ServerPlayer player) {
+        ItemStack stack = container.getItem(SLOT_ITEM);
+        if (!isEnhanceable(stack) || isExhausted(stack) || !hasWork(stack)) {
+            lastResult = "screen.smalltools.enhancer.maxed";
+            sync();
+            return false;
+        }
+        int need = costFor(stack);
+        int have = fillOf(stack);
+        if (have >= need) {
+            lastResult = "screen.smalltools.enhancer.ready";
+            sync();
+            return false;      // 已经满了，别再浪费材料
+        }
+        if (lapisCount() < 1) {
+            lastResult = "screen.smalltools.enhancer.no_material";
+            sync();
+            return false;
+        }
+        if (!consumeLapis(1)) {
+            return false;
+        }
+        stack.set(SmallTools.ENHANCE_FILL.get(), Math.min(need, have + 1));
+
+        lastResult = "screen.smalltools.enhancer.invested";
+        broadcastChanges();
+        sync();
+        return true;
+    }
+
+    /**
+     * 执行一次强化：要求进度已经攒满。
      *
      * @return 是否成功
      */
@@ -232,37 +283,30 @@ public class EnhancerMenu extends AbstractContainerMenu {
         if (!isEnhanceable(stack)) {
             return false;
         }
-        // 强化必须在服务端做；用玩家所在的 level 取附魔注册表
         if (!(menuPlayer.level() instanceof ServerLevel level)) {
             return false;
         }
-
         if (isExhausted(stack)) {
             lastResult = "screen.smalltools.enhancer.exhausted";
             sync();
             return false;
         }
-        if (!canEnhance(stack)) {
+        if (!hasWork(stack)) {
             lastResult = "screen.smalltools.enhancer.maxed";
             sync();
             return false;
         }
-
-        int cost = costFor(stack);
-        if (lapisCount() < cost) {
-            lastResult = "screen.smalltools.enhancer.no_material";
+        // 进度没攒满就不给强化
+        if (fillOf(stack) < costFor(stack)) {
+            lastResult = "screen.smalltools.enhancer.not_ready";
             sync();
             return false;
         }
 
-        // 先规划这一步要做什么，成功后再扣材料，避免扣了料没生效
+        // 规划这一步做什么
         boolean filled = false;
         if (needsFill(stack)) {
             filled = tryFill(stack, level);
-            if (!filled) {
-                // 补不出新附魔（可选池为空）时退回升级
-                filled = false;
-            }
         }
         if (!filled) {
             if (!tryUpgrade(stack)) {
@@ -272,12 +316,8 @@ public class EnhancerMenu extends AbstractContainerMenu {
             }
         }
 
-        // 扣材料
-        if (!consumeLapis(cost)) {
-            return false;
-        }
-
-        // 记一次强化
+        // 强化成功：清零本次进度、记一次次数
+        stack.set(SmallTools.ENHANCE_FILL.get(), 0);
         stack.set(SmallTools.ENHANCE_COUNT.get(), enhanceCount(stack) + 1);
 
         lastResult = filled
@@ -357,7 +397,7 @@ public class EnhancerMenu extends AbstractContainerMenu {
         var inv = menuPlayer.getInventory();
         for (int i = 0; i < inv.getContainerSize() && remaining > 0; i++) {
             ItemStack s = inv.getItem(i);
-            if (!(s.getItem() instanceof CondensedLapisItem)) {
+            if (!(s.getItem() instanceof LiquidLapisItem)) {
                 continue;
             }
             int take = Math.min(remaining, s.getCount());

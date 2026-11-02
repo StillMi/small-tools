@@ -29,8 +29,8 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
     private static final int INV_U = EnhancerMenu.INV_U;
     private static final int INV_V = EnhancerMenu.INV_V;
 
-    private static final int LIST_V = 108;
-    private static final int ROW_STEP = 13;
+    private static final int LIST_V = 106;
+    private static final int ROW_STEP = 12;
 
     private static final int PANEL_TOP = 0xD8081428;
     private static final int PANEL_BOTTOM = 0xE0040814;
@@ -47,9 +47,11 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
     private int cost;
     private int lapis;
     private int used;
+    private int fill;
     private Component result = Component.empty();
 
     private Button enhanceButton;
+    private Button investButton;
 
     public EnhancerScreen(EnhancerMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
@@ -71,6 +73,15 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
                 false);
         this.addRenderableWidget(enhanceButton);
 
+        investButton = MagicButton.create(
+                Button.builder(Component.translatable("screen.smalltools.enhancer.invest"),
+                                b -> PacketDistributor.sendToServer(new EnhanceActionPayload(
+                                        this.menu.containerId, EnhanceActionPayload.KIND_INVEST)))
+                        .bounds(this.leftPos + (PANEL_W - 120) / 2,
+                                this.topPos + EnhancerMenu.BUTTON_V - 24, 120, 20),
+                false);
+        this.addRenderableWidget(investButton);
+
         PacketDistributor.sendToServer(new EnhanceActionPayload(
                 this.menu.containerId, EnhanceActionPayload.KIND_REFRESH));
     }
@@ -83,6 +94,7 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
         this.cost = payload.cost();
         this.lapis = payload.lapis();
         this.used = payload.used();
+        this.fill = payload.fill();
         this.result = payload.result();
     }
 
@@ -172,51 +184,76 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
             }
         }
 
-        // ---- 强化次数进度条 ----
+        // ---- 强化次数（5 个格子）----
         int barU = this.leftPos + 20;
-        int barV = this.topPos + 160;
+        int barV = this.topPos + 158;
         int barW = PANEL_W - 40;
-        int barH = 6;
+        int barH = 5;
 
         graphics.drawString(this.font,
                 Component.translatable("screen.smalltools.enhancer.progress",
                         this.used, EnhancerMenu.MAX_ENHANCES),
-                barU, barV - 11, exhausted ? DANGER : MUTED, false);
+                barU, barV - 10, exhausted ? DANGER : MUTED, false);
 
-        graphics.fill(barU - 1, barV - 1, barU + barW + 1, barV + barH + 1,
-                withAlpha(ACCENT_SOFT, 120));
-        graphics.fill(barU, barV, barU + barW, barV + barH, 0xFF0A1120);
-
-        // 五段式格子：一眼看出还剩几次
         int segGap = 2;
         int segW = (barW - segGap * (EnhancerMenu.MAX_ENHANCES - 1)) / EnhancerMenu.MAX_ENHANCES;
         for (int i = 0; i < EnhancerMenu.MAX_ENHANCES; i++) {
             int segX = barU + i * (segW + segGap);
-            boolean filled = i < this.used;
-            int col = filled ? (exhausted ? DANGER : GOLD) : 0xFF16223A;
+            int col = i < this.used ? (exhausted ? DANGER : GOLD) : 0xFF16223A;
             graphics.fill(segX, barV, segX + segW, barV + barH, col);
         }
 
+        // ---- 经验条：投入浓缩液态青金填充 ----
+        int xpV = this.topPos + 182;
+        int xpH = 8;
+        int need = Math.max(1, this.cost);
+        float ratio = Mth.clamp(this.fill / (float) need, 0.0F, 1.0F);
+        boolean ready = this.fill >= need && !exhausted;
+
+        graphics.drawString(this.font,
+                Component.translatable("screen.smalltools.enhancer.xp",
+                        this.fill, need),
+                barU, xpV - 11, ready ? GOLD : MUTED, false);
+
+        // 外框
+        graphics.fill(barU - 1, xpV - 1, barU + barW + 1, xpV + xpH + 1,
+                withAlpha(ACCENT_SOFT, 130));
+        graphics.fill(barU, xpV, barU + barW, xpV + xpH, 0xFF0A1120);
+
+        int filledW = (int) (barW * ratio);
+        if (filledW > 0) {
+            if (ready) {
+                // 已满：金色，并随时间轻微呼吸
+                long now2 = System.currentTimeMillis();
+                float pulse = 0.7F + 0.3F * Mth.sin(now2 / 200.0F);
+                graphics.fillGradient(barU, xpV, barU + filledW, xpV + xpH,
+                        withAlpha(GOLD, (int) (200 + 55 * pulse)),
+                        withAlpha(0xFFFFAA22, (int) (170 + 70 * pulse)));
+            } else {
+                graphics.fillGradient(barU, xpV, barU + filledW, xpV + xpH,
+                        ACCENT, ACCENT_SOFT);
+            }
+        }
+
         // ---- 消耗与持有量 ----
-        int costColor = this.lapis >= this.cost && !exhausted ? OK : DANGER;
-        Component costText = exhausted
-                ? Component.translatable("screen.smalltools.enhancer.exhausted")
-                : Component.translatable("screen.smalltools.enhancer.cost", this.cost);
-        graphics.drawCenteredString(this.font, costText, centerX,
-                this.topPos + 170, costColor);
+        int costColor = this.lapis >= 1 && !exhausted && !ready ? OK : MUTED;
         graphics.drawCenteredString(this.font,
                 Component.translatable("screen.smalltools.enhancer.have", this.lapis),
-                centerX, this.topPos + 180, MUTED);
+                centerX, this.topPos + 196, costColor);
 
-        // ---- 结果提示（放在列表下方，不和槽/按钮抢位置）----
+        // ---- 结果提示 ----
         if (!this.result.getString().isEmpty()) {
             graphics.drawCenteredString(this.font, this.result, centerX,
-                    this.topPos + 96, OK);
+                    this.topPos + 96, ready ? GOLD : OK);
         }
 
         if (this.enhanceButton != null) {
-            this.enhanceButton.active = !exhausted && this.lapis >= this.cost
-                    && this.cost > 0;
+            // 强化按钮：进度满了才能按
+            this.enhanceButton.active = ready;
+        }
+        if (this.investButton != null) {
+            // 投入按钮：还没有满、还有材料、还有次数
+            this.investButton.active = !ready && !exhausted && this.lapis >= 1;
         }
     }
 

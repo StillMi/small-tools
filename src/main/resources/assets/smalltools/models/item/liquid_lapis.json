@@ -1,6 +1,6 @@
 {
   "parent": "minecraft:item/generated",
   "textures": {
-    "layer0": "smalltools:item/condensed_lapis"
+    "layer0": "smalltools:item/liquid_lapis"
   }
 }

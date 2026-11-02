@@ -6,7 +6,7 @@ import com.example.smalltools.item.AbstractPortalStoneItem;
 import com.example.smalltools.item.DungeonPortalStoneItem;
 import com.example.smalltools.item.PortalStoneItem;
 import com.example.smalltools.item.WashStoneItem;
-import com.example.smalltools.item.CondensedLapisItem;
+import com.example.smalltools.item.LiquidLapisItem;
 import com.example.smalltools.item.EnchantEnhancerItem;
 import com.example.smalltools.menu.EnhancerMenu;
 import com.example.smalltools.menu.WashStoneMenu;
@@ -93,6 +93,19 @@ public class SmallTools {
                             .networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.VAR_INT));
 
     /**
+     * 这件物品当前攒了多少"强化经验"。
+     *
+     * <p>用浓缩液态青金一点一点投入，攒够 {@link com.example.smalltools.menu.EnhancerMenu}
+     * 要求的量才能完成一次强化。存在物品上，中途关界面不会白费投入。</p>
+     */
+    public static final DeferredHolder<DataComponentType<?>, DataComponentType<Integer>> ENHANCE_FILL =
+            DATA_COMPONENTS.registerComponentType(
+                    "enhance_fill",
+                    builder -> builder
+                            .persistent(com.mojang.serialization.Codec.INT)
+                            .networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.VAR_INT));
+
+    /**
      * 末影传送石：8 黑曜石 + 1 末影珍珠合成。
      * durability(N) 让"N 次开门"直接复用原版耐久机制，用满后物品自动销毁。
      */
@@ -124,10 +137,10 @@ public class SmallTools {
             EnchantEnhancerItem::new,
             new Item.Properties().rarity(Rarity.RARE));
 
-    /** 凝造青金：8 青金石 + 1 原石，强化消耗材料。 */
-    public static final DeferredItem<CondensedLapisItem> CONDENSED_LAPIS = ITEMS.registerItem(
-            "condensed_lapis",
-            CondensedLapisItem::new,
+    /** 浓缩液态青金：青金石在熔炉里烧出来，强化时投入。 */
+    public static final DeferredItem<LiquidLapisItem> LIQUID_LAPIS = ITEMS.registerItem(
+            "liquid_lapis",
+            LiquidLapisItem::new,
             new Item.Properties());
 
     /** 强化界面。 */
@@ -182,7 +195,7 @@ public class SmallTools {
                         output.accept(DUNGEON_PORTAL_STONE.get());
                         output.accept(WASH_STONE.get());
                         output.accept(ENHANCER.get());
-                        output.accept(CONDENSED_LAPIS.get());
+                        output.accept(LIQUID_LAPIS.get());
                     })
                     .build());
 

@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:smelting",
+  "category": "misc",
+  "ingredient": {
+    "item": "minecraft:lapis_lazuli"
+  },
+  "result": {
+    "id": "smalltools:liquid_lapis",
+    "count": 1
+  },
+  "experience": 0.35,
+  "cookingtime": 200
+}

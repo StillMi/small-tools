@@ -19,8 +19,10 @@ public record EnhanceActionPayload(int containerId, int kind) implements CustomP
 
     /** 请求刷新一次状态（界面刚打开时用）。 */
     public static final int KIND_REFRESH = 0;
-    /** 请求执行一次强化。 */
-    public static final int KIND_ENHANCE = 1;
+    /** 投入一颗浓缩液态青金。 */
+    public static final int KIND_INVEST = 1;
+    /** 请求完成一次强化（进度必须已满）。 */
+    public static final int KIND_ENHANCE = 2;
 
     public static final CustomPacketPayload.Type<EnhanceActionPayload> TYPE =
             new CustomPacketPayload.Type<>(
@@ -47,7 +49,9 @@ public record EnhanceActionPayload(int containerId, int kind) implements CustomP
                     || menu.containerId != payload.containerId()) {
                 return;
             }
-            if (payload.kind() == KIND_ENHANCE) {
+            if (payload.kind() == KIND_INVEST) {
+                menu.invest(player);
+            } else if (payload.kind() == KIND_ENHANCE) {
                 menu.enhance();
             }
             EnhancerSyncPayload.send(player, menu);

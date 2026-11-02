@@ -57,13 +57,10 @@
   "screen.smalltools.wash.luck.ready": "洗炼运气：已满 —— 下一次必定最高等级",
   "tooltip.smalltools.wash_stone.lore": "据说它取自附魔台底下那层从未被人翻动的黑曜岩，攥在手里能听见旧咒语剥落的声音……",
   "item.smalltools.enchant_enhancer": "附魔强化器",
-  "item.smalltools.condensed_lapis": "凝造青金",
   "container.smalltools.enhancer": "附魔强化",
   "tooltip.smalltools.enhancer": "消耗凝造青金，随机强化物品上的一个附魔",
   "tooltip.smalltools.enhancer.hint": "附魔不足 3 条时会先补充 1 级的随机附魔",
   "tooltip.smalltools.enhancer.lore": "台座上的纹路会记住每一次强化，要价一次比一次高……",
-  "tooltip.smalltools.condensed_lapis": "附魔强化所需的材料",
-  "tooltip.smalltools.condensed_lapis.lore": "青金在石心深处凝了千年，才结成这么一小块……",
   "screen.smalltools.enhancer.button": "强 化",
   "screen.smalltools.enhancer.insert": "把已附魔的物品放进槽里",
   "screen.smalltools.enhancer.have": "持有凝造青金：%s",
@@ -73,5 +70,13 @@
   "screen.smalltools.enhancer.no_material": "凝造青金不足",
   "screen.smalltools.enhancer.cost": "本次消耗：%s × 凝造青金",
   "screen.smalltools.enhancer.progress": "强化进度：%s / %s",
-  "screen.smalltools.enhancer.exhausted": "这件装备已经强化满 5 次，无法继续"
+  "screen.smalltools.enhancer.exhausted": "这件装备已经强化满 5 次，无法继续",
+  "item.smalltools.liquid_lapis": "浓缩液态青金",
+  "tooltip.smalltools.liquid_lapis": "强化时投入的材料，由青金石在熔炉中烧制",
+  "tooltip.smalltools.liquid_lapis.lore": "青金在烈焰里化开，凝成一小瓶流动的深蓝……",
+  "screen.smalltools.enhancer.invest": "投 入 ×1",
+  "screen.smalltools.enhancer.xp": "强化经验：%s / %s",
+  "screen.smalltools.enhancer.invested": "投入了一颗液态青金",
+  "screen.smalltools.enhancer.ready": "经验已满，可以强化了",
+  "screen.smalltools.enhancer.not_ready": "经验还没攒满"
 }

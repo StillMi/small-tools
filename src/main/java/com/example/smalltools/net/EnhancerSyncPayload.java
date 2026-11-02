@@ -29,8 +29,21 @@ public record EnhancerSyncPayload(int containerId,
                                   List<Entry> enchantments,
                                   int cost,
                                   int lapis,
-                                  int used,
+                                  int packed,
                                   Component result) implements CustomPacketPayload {
+
+    /** 把 used / fill 打包成一个 int，省出流参数的位置。 */
+    public static int pack(int used, int fill) {
+        return (used & 0xFF) | ((fill & 0xFFFF) << 8);
+    }
+
+    public int used() {
+        return this.packed & 0xFF;
+    }
+
+    public int fill() {
+        return (this.packed >>> 8) & 0xFFFF;
+    }
 
     /** 一条附魔：显示名、等级、是否已满级。 */
     public record Entry(Component name, int level, boolean maxed) {
@@ -52,7 +65,7 @@ public record EnhancerSyncPayload(int containerId,
                     Entry.STREAM_CODEC.apply(ByteBufCodecs.list()), EnhancerSyncPayload::enchantments,
                     ByteBufCodecs.VAR_INT, EnhancerSyncPayload::cost,
                     ByteBufCodecs.VAR_INT, EnhancerSyncPayload::lapis,
-                    ByteBufCodecs.VAR_INT, EnhancerSyncPayload::used,
+                    ByteBufCodecs.VAR_INT, EnhancerSyncPayload::packed,
                     ComponentSerialization.STREAM_CODEC, EnhancerSyncPayload::result,
                     EnhancerSyncPayload::new);
 
@@ -83,7 +96,7 @@ public record EnhancerSyncPayload(int containerId,
 
         PacketDistributor.sendToPlayer(player, new EnhancerSyncPayload(
                 menu.containerId, list, menu.costFor(stack), menu.lapisCount(),
-                menu.enhanceCount(stack), result));
+                pack(menu.enhanceCount(stack), menu.fillOf(stack)), result));
     }
 
     public static void handle(EnhancerSyncPayload payload, IPayloadContext context) {

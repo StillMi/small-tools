@@ -321,65 +321,77 @@ def make_enhancer_item() -> Image.Image:
     return img
 
 
-def make_condensed_lapis() -> Image.Image:
-    """凝造青金：一块被打磨过的深蓝多面结晶，带金色裂纹内光。
+def make_liquid_lapis() -> Image.Image:
+    """浓缩液态青金：一滩流动的青金，没有容器。
 
-    之前那版只是"拉长的菱形"，没有体感。现在做成三段切面：
-    左上亮面、中间主面、右下暗面，再压一条金色裂纹。
+    16px 下用参数曲线画"液态"很容易变成一团圆球，所以这里直接手写
+    每一行的左右边界：顶部收窄、中部鼓出、底部摊平并拖出一丝，
+    轮廓本身就不对称，才像在流动。
     """
     img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     px = img.load()
 
-    OUTLINE = (10, 22, 58, 255)
-    DEEP = (22, 46, 104, 255)
-    MID = (44, 86, 168, 255)
-    BRIGHT = (96, 148, 232, 255)
-    LIGHT = (176, 212, 255, 255)
-    GOLD = (255, 214, 128, 255)
+    EDGE = (8, 20, 56, 255)
+    DEEP = (16, 36, 92, 255)
+    MID = (34, 74, 156, 255)
+    BRIGHT = (82, 134, 222, 255)
+    LIGHT = (156, 198, 252, 255)
+    GLOSS = (228, 244, 255, 255)
 
-    cx, cy = 8.0, 8.0
+    # 每一行的手写边界：(左, 右)，None 表示这一行没有液体
+    rows = {
+        2: (7, 8),
+        3: (6, 9),
+        4: (5, 10),
+        5: (4, 11),
+        6: (3, 11),
+        7: (3, 12),
+        8: (3, 12),
+        9: (3, 12),
+        10: (3, 12),
+        11: (4, 11),
+        12: (4, 11),
+        13: (5, 10),
+        14: (6, 9),
+    }
 
-    def inside(x, y):
-        dx = x + 0.5 - cx
-        dy = y + 0.5 - cy
-        # 六边形结晶，比菱形更像切割过的宝石
-        dist = math.hypot(dx, dy)
-        if dist > 6.9:
-            return False
-        ang = math.atan2(dy, dx)
-        return dist <= 6.0 + 0.8 * math.cos(ang * 6.0)
-
-    # 外轮廓 + 三个切面
-    for y in range(SIZE):
-        for x in range(SIZE):
-            if not inside(x, y):
-                continue
-            if any(not inside(x + ddx, y + ddy)
-                   for ddx, ddy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
-                px[x, y] = OUTLINE
-                continue
-            dx = x + 0.5 - cx
-            dy = y + 0.5 - cy
-            # 用对角线把晶体切成三块，模拟刻面
-            t = dx + dy
-            if t < -2.0:
-                px[x, y] = LIGHT
-            elif t < 0.4:
-                px[x, y] = BRIGHT
-            elif t < 2.4:
-                px[x, y] = MID
+    for y, (l, r) in rows.items():
+        for x in range(l, r + 1):
+            # 左右两端描深边
+            if x == l or x == r or y == 2 or y == 14:
+                px[x, y] = EDGE
             else:
-                px[x, y] = DEEP
+                # 上浅下深，做出液体厚度。
+                # 分层阈值要交错一点，否则会出现"整行同色、下一行突变"的横条感
+                depth = (y - 3) / 11.0 + ((x * 7) % 3 - 1) * 0.035
+                if depth < 0.22:
+                    px[x, y] = GLOSS
+                elif depth < 0.42:
+                    px[x, y] = LIGHT
+                elif depth < 0.62:
+                    px[x, y] = BRIGHT
+                elif depth < 0.85:
+                    px[x, y] = MID
+                else:
+                    px[x, y] = DEEP
 
-    # 金色裂纹：只留极细的一小道，颜色也压暗，
-    # 否则在 16px 下会变成一块显眼的补丁，破坏刻面整体感
-    for (x, y) in ((8, 9), (9, 10)):
-        if 0 <= x < SIZE and 0 <= y < SIZE and px[x, y][3] > 0:
-            px[x, y] = (196, 158, 84, 255)
+    # 内部的流动纹：一条 S 形亮带，从左中穿到右下
+    for (x, y) in ((5, 7), (6, 8), (7, 9), (8, 9), (9, 10), (10, 10), (10, 11)):
+        if px[x, y][3] > 0:
+            px[x, y] = LIGHT
 
-    # 顶部一点极高光
-    if px[7, 4][3] > 0:
-        px[7, 4] = (240, 250, 255, 255)
+    # 气泡
+    for (x, y) in ((6, 11), (9, 7)):
+        if px[x, y][3] > 0:
+            px[x, y] = (200, 228, 255, 255)
+
+    # 左上高光
+    for (x, y) in ((5, 5), (6, 5), (5, 6)):
+        if px[x, y][3] > 0:
+            px[x, y] = GLOSS
+
+    # 底边拖出一滴，强调液态（注意 y 最大只能是 15）
+    px[8, 15] = MID
 
     return img
 
@@ -393,7 +405,7 @@ def main() -> None:
         os.path.join(item_dir, "dungeon_portal_stone.png"): make_dungeon_item(),
         os.path.join(item_dir, "wash_stone.png"): make_wash_item(),
         os.path.join(item_dir, "enchant_enhancer.png"): make_enhancer_item(),
-        os.path.join(item_dir, "condensed_lapis.png"): make_condensed_lapis(),
+        os.path.join(item_dir, "liquid_lapis.png"): make_liquid_lapis(),
     }
 
     for path, image in targets.items():

@@ -70,5 +70,8 @@
   "screen.smalltools.enhancer.upgraded": "强化成功：一个附魔提升了一级",
   "screen.smalltools.enhancer.filled": "强化成功：补充了一条 1 级附魔",
   "screen.smalltools.enhancer.maxed": "所有附魔都已到上限，无法继续强化",
-  "screen.smalltools.enhancer.no_material": "凝造青金不足"
+  "screen.smalltools.enhancer.no_material": "凝造青金不足",
+  "screen.smalltools.enhancer.cost": "本次消耗：%s × 凝造青金",
+  "screen.smalltools.enhancer.progress": "强化进度：%s / %s",
+  "screen.smalltools.enhancer.exhausted": "这件装备已经强化满 5 次，无法继续"
 }

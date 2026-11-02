@@ -29,8 +29,8 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
     private static final int INV_U = EnhancerMenu.INV_U;
     private static final int INV_V = EnhancerMenu.INV_V;
 
-    private static final int LIST_V = 104;
-    private static final int ROW_STEP = 12;
+    private static final int LIST_V = 108;
+    private static final int ROW_STEP = 13;
 
     private static final int PANEL_TOP = 0xD8081428;
     private static final int PANEL_BOTTOM = 0xE0040814;
@@ -46,7 +46,7 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
     private List<EnhancerSyncPayload.Entry> enchantments = List.of();
     private int cost;
     private int lapis;
-    private boolean canEnhance;
+    private int used;
     private Component result = Component.empty();
 
     private Button enhanceButton;
@@ -67,7 +67,7 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
                                 b -> PacketDistributor.sendToServer(new EnhanceActionPayload(
                                         this.menu.containerId, EnhanceActionPayload.KIND_ENHANCE)))
                         .bounds(this.leftPos + (PANEL_W - 120) / 2,
-                                this.topPos + PANEL_H - 32, 120, 20),
+                                this.topPos + EnhancerMenu.BUTTON_V, 120, 20),
                 false);
         this.addRenderableWidget(enhanceButton);
 
@@ -82,7 +82,7 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
         this.enchantments = payload.enchantments();
         this.cost = payload.cost();
         this.lapis = payload.lapis();
-        this.canEnhance = payload.canEnhance();
+        this.used = payload.used();
         this.result = payload.result();
     }
 
@@ -152,44 +152,71 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
         super.render(graphics, mouseX, mouseY, partialTick);
 
         int centerX = this.leftPos + PANEL_W / 2;
+        boolean exhausted = this.used >= EnhancerMenu.MAX_ENHANCES;
 
-        // 附魔列表：每行名字 + 等级，满级的用金色勾标
+        // ---- 附魔列表 ----
         int y = this.topPos + LIST_V;
         if (this.enchantments.isEmpty()) {
             graphics.drawCenteredString(this.font,
                     Component.translatable("screen.smalltools.enhancer.insert"),
-                    centerX, this.topPos + 84, MUTED);
+                    centerX, this.topPos + 92, MUTED);
         } else {
             for (EnhancerSyncPayload.Entry e : this.enchantments) {
                 int color = e.maxed() ? GOLD : TITLE;
-                graphics.drawString(this.font, e.name(), this.leftPos + 24, y, color, false);
+                graphics.drawString(this.font, e.name(), this.leftPos + 26, y, color, false);
                 if (e.maxed()) {
-                    graphics.drawString(this.font, "MAX", this.leftPos + PANEL_W - 44, y,
+                    graphics.drawString(this.font, "MAX", this.leftPos + PANEL_W - 46, y,
                             GOLD, false);
                 }
                 y += ROW_STEP;
             }
         }
 
-        // 消耗与持有量
-        String costText = this.cost + " × 凝造青金";
-        int costColor = this.lapis >= this.cost ? OK : DANGER;
-        graphics.drawCenteredString(this.font,
-                Component.literal(costText), centerX, this.topPos + PANEL_H - 48, costColor);
-        graphics.drawCenteredString(this.font,
-                Component.translatable("screen.smalltools.enhancer.have", this.lapis),
-                centerX, this.topPos + PANEL_H - 38, MUTED);
+        // ---- 强化次数进度条 ----
+        int barU = this.leftPos + 20;
+        int barV = this.topPos + 160;
+        int barW = PANEL_W - 40;
+        int barH = 6;
 
-        // 结果提示：空组件表示这一轮没有消息
-        if (!this.result.getString().isEmpty()) {
-            int color = this.result.getString().contains("MAX") ? DANGER : OK;
-            graphics.drawCenteredString(this.font, this.result, centerX,
-                    this.topPos + 88, color);
+        graphics.drawString(this.font,
+                Component.translatable("screen.smalltools.enhancer.progress",
+                        this.used, EnhancerMenu.MAX_ENHANCES),
+                barU, barV - 11, exhausted ? DANGER : MUTED, false);
+
+        graphics.fill(barU - 1, barV - 1, barU + barW + 1, barV + barH + 1,
+                withAlpha(ACCENT_SOFT, 120));
+        graphics.fill(barU, barV, barU + barW, barV + barH, 0xFF0A1120);
+
+        // 五段式格子：一眼看出还剩几次
+        int segGap = 2;
+        int segW = (barW - segGap * (EnhancerMenu.MAX_ENHANCES - 1)) / EnhancerMenu.MAX_ENHANCES;
+        for (int i = 0; i < EnhancerMenu.MAX_ENHANCES; i++) {
+            int segX = barU + i * (segW + segGap);
+            boolean filled = i < this.used;
+            int col = filled ? (exhausted ? DANGER : GOLD) : 0xFF16223A;
+            graphics.fill(segX, barV, segX + segW, barV + barH, col);
         }
 
-        // 材料不足或全满时禁用按钮
+        // ---- 消耗与持有量 ----
+        int costColor = this.lapis >= this.cost && !exhausted ? OK : DANGER;
+        Component costText = exhausted
+                ? Component.translatable("screen.smalltools.enhancer.exhausted")
+                : Component.translatable("screen.smalltools.enhancer.cost", this.cost);
+        graphics.drawCenteredString(this.font, costText, centerX,
+                this.topPos + 170, costColor);
+        graphics.drawCenteredString(this.font,
+                Component.translatable("screen.smalltools.enhancer.have", this.lapis),
+                centerX, this.topPos + 180, MUTED);
+
+        // ---- 结果提示（放在列表下方，不和槽/按钮抢位置）----
+        if (!this.result.getString().isEmpty()) {
+            graphics.drawCenteredString(this.font, this.result, centerX,
+                    this.topPos + 96, OK);
+        }
+
         if (this.enhanceButton != null) {
-            this.enhanceButton.active = this.canEnhance && this.lapis >= this.cost;
+            this.enhanceButton.active = !exhausted && this.lapis >= this.cost
+                    && this.cost > 0;
         }
     }
 

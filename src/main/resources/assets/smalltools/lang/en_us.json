@@ -70,5 +70,8 @@
   "screen.smalltools.enhancer.upgraded": "Success: one enchantment went up a level",
   "screen.smalltools.enhancer.filled": "Success: a level-1 enchantment was added",
   "screen.smalltools.enhancer.maxed": "All enchantments are already at maximum",
-  "screen.smalltools.enhancer.no_material": "Not enough Condensed Lapis"
+  "screen.smalltools.enhancer.no_material": "Not enough Condensed Lapis",
+  "screen.smalltools.enhancer.cost": "Cost: %s × Condensed Lapis",
+  "screen.smalltools.enhancer.progress": "Enhancements: %s / %s",
+  "screen.smalltools.enhancer.exhausted": "This item has reached its five-enhancement limit"
 }

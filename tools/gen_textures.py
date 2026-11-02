@@ -244,92 +244,142 @@ def make_wash_item() -> Image.Image:
 
 
 def make_enhancer_item() -> Image.Image:
-    """附魔强化器：金框包一颗蓝色核心，暗示"加压/强化"。
+    """附魔强化器：一座六棱石台，中间嵌一颗被金色符文圈住的蓝色核心。
 
-    配色和凝造青金呼应（青蓝 + 金），和洗炼石的青白结晶区分开。
+    之前那版是"金方框 + 菱形"过于扁平。现在做成有体积的：
+    台座有斜面高光、核心有内发光、四角有符文光点。
     """
     img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     px = img.load()
-    random.seed(71)
 
-    GOLD_D = (150, 108, 30, 255)
-    GOLD = (222, 176, 62, 255)
-    GOLD_L = (255, 224, 138, 255)
-    CORE_D = (28, 66, 110, 255)
-    CORE = (58, 130, 200, 255)
-    CORE_L = (150, 210, 255, 255)
+    STONE_D = (48, 44, 62, 255)
+    STONE = (72, 68, 92, 255)
+    STONE_L = (104, 100, 128, 255)
+    GOLD_D = (156, 110, 26, 255)
+    GOLD = (226, 178, 62, 255)
+    GOLD_L = (255, 232, 150, 255)
+    CORE_D = (24, 52, 96, 255)
+    CORE = (52, 122, 198, 255)
+    CORE_L = (140, 206, 255, 255)
+    CORE_W = (226, 244, 255, 255)
 
-    # 外框：一圈金色方环
+    cx, cy = 8.0, 8.0
+
+    # 1) 六棱台座：半径随角度做六边形起伏
     for y in range(SIZE):
         for x in range(SIZE):
-            on_edge = x in (2,3,12,13) or y in (2,3,12,13)
-            near_edge = 1 < x < 14 and 1 < y < 14
-            if not near_edge:
+            dx = x + 0.5 - cx
+            dy = y + 0.5 - cy
+            dist = math.hypot(dx, dy)
+            if dist > 7.4:
                 continue
-            if on_edge:
-                # 左上亮、右下暗
-                top_left = (x + y) < 16
-                px[x, y] = GOLD_L if top_left else GOLD
-            elif x in (1,14) or y in (1,14):
-                px[x, y] = GOLD_D
+            ang = math.atan2(dy, dx)
+            edge = 6.4 + 0.85 * math.cos(ang * 6.0)
+            if dist > edge:
+                continue
+            if dist > edge - 0.95:
+                px[x, y] = STONE_D            # 外沿暗边
+            else:
+                # 左上受光
+                lit = (dx + dy) < -1.0
+                px[x, y] = STONE_L if lit else STONE
 
-    # 中间核心：菱形
+    # 2) 金色符文环：台面上的一圈，八个光点
+    for i in range(8):
+        ang = i * (math.pi * 2 / 8) + 0.39
+        rx = cx + math.cos(ang) * 4.7
+        ry = cy + math.sin(ang) * 4.7
+        sx = int(round(rx))
+        sy = int(round(ry))
+        if 0 <= sx < SIZE and 0 <= sy < SIZE and px[sx, sy][3] > 0:
+            px[sx, sy] = GOLD if i % 2 == 0 else GOLD_D
+
+    # 3) 核心：立体宝石，菱形 + 内发光
     for y in range(SIZE):
         for x in range(SIZE):
-            dx = abs(x + 0.5 - 8.0)
-            dy = abs(y + 0.5 - 8.0)
-            if dx + dy <= 3.4:
-                if dx + dy < 1.2:
+            dx = abs(x + 0.5 - cx)
+            dy = abs(y + 0.5 - cy)
+            d = dx + dy
+            if d <= 3.2:
+                if d < 0.9:
+                    px[x, y] = CORE_W
+                elif d < 1.7:
                     px[x, y] = CORE_L
-                elif dx + dy < 2.4:
+                elif d < 2.5:
                     px[x, y] = CORE
                 else:
                     px[x, y] = CORE_D
+            elif d <= 3.9:
+                # 一层薄薄的外发光，让核心像悬在台面上
+                px[x, y] = (30, 70, 120, 190)
+
+    # 4) 高光点：左上一小簇
+    for (x, y) in ((5, 5), (6, 5), (5, 6)):
+        if px[x, y][3] > 0:
+            px[x, y] = GOLD_L
 
     return img
 
 
 def make_condensed_lapis() -> Image.Image:
-    """凝造青金：深蓝多面结晶，带一点金色内光。"""
+    """凝造青金：一块被打磨过的深蓝多面结晶，带金色裂纹内光。
+
+    之前那版只是"拉长的菱形"，没有体感。现在做成三段切面：
+    左上亮面、中间主面、右下暗面，再压一条金色裂纹。
+    """
     img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     px = img.load()
-    random.seed(83)
 
-    DEEP = (18, 34, 86, 255)
-    MID = (38, 74, 150, 255)
-    BRIGHT = (86, 132, 220, 255)
-    LIGHT = (168, 200, 255, 255)
+    OUTLINE = (10, 22, 58, 255)
+    DEEP = (22, 46, 104, 255)
+    MID = (44, 86, 168, 255)
+    BRIGHT = (96, 148, 232, 255)
+    LIGHT = (176, 212, 255, 255)
+    GOLD = (255, 214, 128, 255)
+
+    cx, cy = 8.0, 8.0
 
     def inside(x, y):
-        dx = x + 0.5 - 8.0
-        dy = y + 0.5 - 8.0
-        # 竖直拉长的菱形，像一颗被压实的晶体
-        return abs(dx) * 1.0 + abs(dy) * 0.72 <= 4.9
+        dx = x + 0.5 - cx
+        dy = y + 0.5 - cy
+        # 六边形结晶，比菱形更像切割过的宝石
+        dist = math.hypot(dx, dy)
+        if dist > 6.9:
+            return False
+        ang = math.atan2(dy, dx)
+        return dist <= 6.0 + 0.8 * math.cos(ang * 6.0)
 
+    # 外轮廓 + 三个切面
     for y in range(SIZE):
         for x in range(SIZE):
             if not inside(x, y):
                 continue
-            if any(not inside(x+dx, y+dy) for dx, dy in ((1,0),(-1,0),(0,1),(0,-1))):
-                px[x, y] = DEEP
+            if any(not inside(x + ddx, y + ddy)
+                   for ddx, ddy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                px[x, y] = OUTLINE
                 continue
-            dx = x + 0.5 - 8.0
-            dy = y + 0.5 - 8.0
-            # 左上靠亮
+            dx = x + 0.5 - cx
+            dy = y + 0.5 - cy
+            # 用对角线把晶体切成三块，模拟刻面
             t = dx + dy
-            if t < -2.4:
+            if t < -2.0:
                 px[x, y] = LIGHT
-            elif t < -0.6:
+            elif t < 0.4:
                 px[x, y] = BRIGHT
-            elif t < 1.8:
+            elif t < 2.4:
                 px[x, y] = MID
             else:
                 px[x, y] = DEEP
 
-    # 一点金色内光，表示"凝结"过的能量
-    for (x, y) in ((7, 9), (8, 9), (8, 10)):
-        if inside(x, y):
-            px[x, y] = (255, 226, 138, 255)
+    # 金色裂纹：只留极细的一小道，颜色也压暗，
+    # 否则在 16px 下会变成一块显眼的补丁，破坏刻面整体感
+    for (x, y) in ((8, 9), (9, 10)):
+        if 0 <= x < SIZE and 0 <= y < SIZE and px[x, y][3] > 0:
+            px[x, y] = (196, 158, 84, 255)
+
+    # 顶部一点极高光
+    if px[7, 4][3] > 0:
+        px[7, 4] = (240, 250, 255, 255)
 
     return img
 

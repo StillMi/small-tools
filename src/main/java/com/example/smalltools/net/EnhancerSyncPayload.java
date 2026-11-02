@@ -29,7 +29,7 @@ public record EnhancerSyncPayload(int containerId,
                                   List<Entry> enchantments,
                                   int cost,
                                   int lapis,
-                                  boolean canEnhance,
+                                  int used,
                                   Component result) implements CustomPacketPayload {
 
     /** 一条附魔：显示名、等级、是否已满级。 */
@@ -52,7 +52,7 @@ public record EnhancerSyncPayload(int containerId,
                     Entry.STREAM_CODEC.apply(ByteBufCodecs.list()), EnhancerSyncPayload::enchantments,
                     ByteBufCodecs.VAR_INT, EnhancerSyncPayload::cost,
                     ByteBufCodecs.VAR_INT, EnhancerSyncPayload::lapis,
-                    ByteBufCodecs.BOOL, EnhancerSyncPayload::canEnhance,
+                    ByteBufCodecs.VAR_INT, EnhancerSyncPayload::used,
                     ComponentSerialization.STREAM_CODEC, EnhancerSyncPayload::result,
                     EnhancerSyncPayload::new);
 
@@ -83,7 +83,7 @@ public record EnhancerSyncPayload(int containerId,
 
         PacketDistributor.sendToPlayer(player, new EnhancerSyncPayload(
                 menu.containerId, list, menu.costFor(stack), menu.lapisCount(),
-                menu.canEnhance(stack), result));
+                menu.enhanceCount(stack), result));
     }
 
     public static void handle(EnhancerSyncPayload payload, IPayloadContext context) {

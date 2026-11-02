@@ -53,14 +53,38 @@ public class EnhancerMenu extends AbstractContainerMenu {
     public static final int SLOT_ITEM = 0;
 
     public static final int PANEL_W = 200;
-    public static final int PANEL_H = 226;
+    /** 面板高度：比洗炼界面高，专门留给进度条和按钮。 */
+    public static final int PANEL_H = 268;
     public static final int SLOT_U = (PANEL_W - 18) / 2;
-    public static final int SLOT_V = 58;
+    public static final int SLOT_V = 62;
     public static final int INV_U = (PANEL_W - 9 * 18) / 2;
-    public static final int INV_V = 186;
+    /** 物品栏放到底部，和按钮之间留足空隙，避免重叠。 */
+    public static final int INV_V = 226;
+    /** 强化按钮位置（面板内坐标）。 */
+    public static final int BUTTON_V = 196;
 
     /** 补足目标：物品上最多先凑到这么多条附魔。 */
     public static final int FILL_TO = 3;
+
+    /** 每件装备最多强化几次。 */
+    public static final int MAX_ENHANCES = 5;
+
+    /**
+     * 第 n 次强化的凝造青金消耗（n 从 1 开始）。
+     *
+     * <p>曲线 1 / 3 / 6 / 10 / 15：差值是 2、3、4、5，递增幅度本身也在变大，
+     * 越往后越舍不得。之前写的是 {@code 1 + count}（1/2/3/4/5），
+     * 五次加起来才 15 个，压不住节奏。</p>
+     */
+    public static int costForStep(int step) {
+        return switch (step) {
+            case 1 -> 1;
+            case 2 -> 3;
+            case 3 -> 6;
+            case 4 -> 10;
+            default -> 15;
+        };
+    }
 
     private final InteractionHand hand;
     private final Player menuPlayer;
@@ -124,9 +148,23 @@ public class EnhancerMenu extends AbstractContainerMenu {
         return stack.getOrDefault(SmallTools.ENHANCE_COUNT.get(), 0);
     }
 
-    /** 下一次强化需要几个凝造青金：1, 2, 3, ... */
+    /** 下一次强化需要几个凝造青金；已到上限时返回 0。 */
     public int costFor(ItemStack stack) {
-        return 1 + enhanceCount(stack);
+        int count = enhanceCount(stack);
+        if (count >= MAX_ENHANCES) {
+            return 0;
+        }
+        return costForStep(count + 1);
+    }
+
+    /** 这件装备的强化次数是否已经用满。 */
+    public boolean isExhausted(ItemStack stack) {
+        return enhanceCount(stack) >= MAX_ENHANCES;
+    }
+
+    /** 还能强化几次。 */
+    public int remaining(ItemStack stack) {
+        return Math.max(0, MAX_ENHANCES - enhanceCount(stack));
     }
 
     /** 玩家手上的凝造青金总数。 */
@@ -166,6 +204,9 @@ public class EnhancerMenu extends AbstractContainerMenu {
         if (!isEnhanceable(stack)) {
             return false;
         }
+        if (isExhausted(stack)) {
+            return false;      // 五次用完，彻底停手
+        }
         return needsFill(stack) || hasUpgradable(stack);
     }
 
@@ -196,6 +237,11 @@ public class EnhancerMenu extends AbstractContainerMenu {
             return false;
         }
 
+        if (isExhausted(stack)) {
+            lastResult = "screen.smalltools.enhancer.exhausted";
+            sync();
+            return false;
+        }
         if (!canEnhance(stack)) {
             lastResult = "screen.smalltools.enhancer.maxed";
             sync();

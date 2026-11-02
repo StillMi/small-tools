@@ -91,6 +91,18 @@ python tools\package.py                                      # -> build\libs\sma
 
 有 Gradle 的环境直接用 `gradlew build`。
 
+### 部署到本地测试环境
+
+每次打包后执行：
+
+```powershell
+python tools\deploy.py
+```
+
+它会把最新 `smalltools-*.jar` 复制到
+`H:\PCL\.minecraftersions.21.1\mods`，并**删掉该目录里本模组的所有历史版本**
+（只匹配 `smalltools-*.jar`，不动其他模组）。复制后会比对 SHA256 确认一致。
+
 > `tools/compile.ps1` 必须存成 **UTF-8 with BOM**，否则 Windows PowerShell 5.1
 > 会按 GBK 解析中文注释而报语法错。
 

@@ -1,0 +1,66 @@
+package com.example.smalltools.item;
+
+import com.example.smalltools.Config;
+import com.example.smalltools.portal.PortalManager;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+
+import java.util.List;
+
+/**
+ * 地牢传送石：另一端开在附近的<b>地牢</b>里。
+ *
+ * <p>引导、冷却、耐久、失效规则都和 {@link PortalStoneItem} 一致，
+ * 区别只在"另一端开在哪"：</p>
+ * <ul>
+ *   <li>搜索范围是玩家周围若干个已加载区块（{@code dungeonSearchChunks}），
+ *       不用 256~2048 格那套远程搜索；</li>
+ *   <li>目标必须是<b>地牢</b>（原版 monster room）—— 判定方式是"刷怪笼 + 圆石地板"，
+ *       见 {@link com.example.smalltools.portal.DungeonFinder}；</li>
+ *   <li>地牢那一端用紧凑结构（只有门框 + 门面），因为地牢房间塞不下高台和台阶。</li>
+ * </ul>
+ */
+public class DungeonPortalStoneItem extends AbstractPortalStoneItem {
+
+    public DungeonPortalStoneItem(Properties properties) {
+        super(properties);
+    }
+
+    @Override
+    protected PortalManager.Result openPortal(ServerLevel level, ServerPlayer player,
+                                              net.minecraft.core.BlockPos target) {
+        // 地牢石的目的地是"附近的地牢"，不用石头绑定的坐标，所以这个参数忽略
+        return PortalManager.openDungeonPortalPair(level, player);
+    }
+
+    @Override
+    protected String failureKey(PortalManager.Result result) {
+        return switch (result) {
+            case NO_GROUND -> "message.smalltools.no_ground";
+            case TOO_CLOSE -> "message.smalltools.too_close";
+            case NO_DUNGEON -> "message.smalltools.no_dungeon";
+            default -> "message.smalltools.no_target";
+        };
+    }
+
+    @Override
+    protected String descriptionKey() {
+        return "tooltip.smalltools.dungeon_stone";
+    }
+
+    @Override
+    protected String loreKey() {
+        return "tooltip.smalltools.dungeon_stone.lore";
+    }
+
+    @Override
+    protected void appendExtraTooltip(List<Component> tooltip, net.minecraft.world.item.ItemStack stack) {
+        tooltip.add(Component.translatable("tooltip.smalltools.dungeon_stone.trips", Config.ROUND_TRIPS.get())
+                .withStyle(ChatFormatting.DARK_PURPLE));
+        tooltip.add(Component.translatable("tooltip.smalltools.dungeon_stone.search",
+                Config.DUNGEON_RADIUS_CHUNKS.get() * 16)
+                .withStyle(ChatFormatting.DARK_PURPLE));
+    }
+}

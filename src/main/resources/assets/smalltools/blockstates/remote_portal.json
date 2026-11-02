@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "smalltools:block/remote_portal" },
+    "facing=south": { "model": "smalltools:block/remote_portal", "y": 180 },
+    "facing=east":  { "model": "smalltools:block/remote_portal", "y": 90 },
+    "facing=west":  { "model": "smalltools:block/remote_portal", "y": 270 }
+  }
+}

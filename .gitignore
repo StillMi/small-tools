@@ -1,0 +1,17 @@
+# 构建产物
+build/
+.gradle/
+*.jar
+
+# IDE
+.idea/
+*.iml
+out/
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 依赖缓存（本工程回落到 ../enderportal 取）
+run/
+logs/

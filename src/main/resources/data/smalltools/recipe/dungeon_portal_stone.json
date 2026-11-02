@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "GGG",
+    "GPG",
+    "GGG"
+  ],
+  "key": {
+    "G": {
+      "item": "minecraft:gold_ingot"
+    },
+    "P": {
+      "item": "minecraft:ender_pearl"
+    }
+  },
+  "result": {
+    "id": "smalltools:dungeon_portal_stone",
+    "count": 1
+  }
+}

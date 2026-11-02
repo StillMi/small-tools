@@ -2,6 +2,7 @@ package com.example.smalltools.menu;
 
 import com.example.smalltools.SmallTools;
 import com.example.smalltools.item.WashStoneItem;
+import com.example.smalltools.portal.WashLuck;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
@@ -33,20 +34,21 @@ import java.util.Random;
  * <ol>
  *   <li>把一件<b>已附魔</b>的工具/武器放进槽里；未附魔的放不进去。</li>
  *   <li>界面列出这件物品的每个附魔词条。</li>
- *   <li><b>点下一个词条之后就不能反悔了</b>：洗炼石当场消耗，
- *       输入槽锁死，服务端立刻随机三条候选。此后关界面也不会退还石头。</li>
+ *   <li><b>点下一个词条之后就不可撤销</b>：洗炼石当场消耗、输入槽锁死、
+ *       服务端立刻随机三条候选。此后关界面也不退还石头。</li>
  *   <li>选一条候选，替换掉原来那条附魔。</li>
  * </ol>
  *
- * <h2>为什么石头在"选词条"时就扣</h2>
+ * <h2>等级规则（±1）</h2>
  *
- * <p>需求是"一旦显示要替换的附魔就不可取消，石头一定会被消耗"。如果把扣除放在
- * 最后一步（选候选），玩家看到三条候选都不满意时直接 Esc 就能白嫖一次随机结果、
- * 石头还在手里。所以锁定和扣石头必须发生在同一个动作里。</p>
+ * <p>候选的等级在原附魔等级 <b>±1</b> 范围内随机，并夹在
+ * {@code [1, 该附魔最大等级]} 之间。也就是说原来 II 级，可能出 I / II / III。</p>
  *
- * <h2>为什么候选要放在服务端</h2>
+ * <h2>运气条</h2>
  *
- * <p>候选必须由服务端生成并保存：如果让客户端算，改个包就能刷出任意附魔。</p>
+ * <p>玩家每次洗炼累积 30%~45% 的运气，攒满 100% 后<b>下一次</b>洗炼的三条候选
+ * 全部取该附魔的最高等级，然后清零。运气是玩家属性，跨物品跨门累计，
+ * 存在 {@link WashLuck}。</p>
  */
 public class WashStoneMenu extends AbstractContainerMenu {
 
@@ -54,6 +56,22 @@ public class WashStoneMenu extends AbstractContainerMenu {
     public static final int SLOT_INPUT = 0;
     /** 候选数量。 */
     public static final int CANDIDATE_COUNT = 3;
+
+    /**
+     * 面板尺寸与槽位坐标。
+     *
+     * <p>这些必须和 {@code WashStoneScreen} 里的布局常量完全一致：
+     * {@code Slot.x / Slot.y} 在 1.21.1 里是 <b>final</b>，界面没法在 init 里改，
+     * 只能在构造菜单时就把坐标算对。</p>
+     */
+    public static final int PANEL_W = 200;
+    public static final int PANEL_H = 226;
+    /** 输入槽左上角（面板内坐标）。 */
+    public static final int SLOT_U = (PANEL_W - 18) / 2;
+    public static final int SLOT_V = 58;
+    /** 物品栏那一行（面板内坐标）。 */
+    public static final int INV_U = (PANEL_W - 9 * 18) / 2;
+    public static final int INV_V = 186;
 
     /** 一条候选附魔。 */
     public record Candidate(Holder<Enchantment> enchantment, int level) {
@@ -68,24 +86,16 @@ public class WashStoneMenu extends AbstractContainerMenu {
         }
     };
 
-    /** 可选词条（输入物品上的附魔），顺序稳定，客户端按序展示。 */
     private final List<Holder<Enchantment>> entries = new ArrayList<>();
-    /** 三条候选；只有锁定之后才非空。 */
     private final List<Candidate> candidates = new ArrayList<>();
-    /** 当前选中的词条下标，-1 表示还没选。 */
     private int selected = -1;
-    /**
-     * 是否已经锁定。
-     *
-     * <p>锁定后：输入槽不可再动、石头已扣、候选已生成。关界面也不回退。</p>
-     */
     private boolean locked;
 
-    private final Random random = new Random();
+    /** 服务端算出的运气百分比（0~100），只用于显示。 */
+    private int luckPercent;
 
-    /** 只在服务端非空：用来把状态推给客户端。 */
+    private final Random random = new Random();
     private final ServerPlayer owner;
-    /** 洗炼石是在哪只手用的（扣石头时要用）。 */
     private final Player menuPlayer;
 
     public WashStoneMenu(int id, Inventory inventory, InteractionHand hand) {
@@ -94,18 +104,15 @@ public class WashStoneMenu extends AbstractContainerMenu {
         this.menuPlayer = inventory.player;
         this.owner = inventory.player instanceof ServerPlayer sp ? sp : null;
 
-        // 只有一个输入槽，位置交给客户端界面自己画
-        this.addSlot(new Slot(container, SLOT_INPUT, 80, 60) {
+        // 输入槽：坐标直接按面板内的位置算好
+        this.addSlot(new Slot(container, SLOT_INPUT, SLOT_U + 1, SLOT_V + 1) {
             @Override
             public boolean mayPlace(ItemStack stack) {
-                // 锁定后不许再塞东西进来
                 return !WashStoneMenu.this.locked && isWashable(stack);
             }
 
             @Override
             public boolean mayPickup(Player player) {
-                // 锁定后不许把物品拿走：候选是按这件物品算出来的，
-                // 换了物品就对不上了
                 return !WashStoneMenu.this.locked;
             }
 
@@ -115,23 +122,22 @@ public class WashStoneMenu extends AbstractContainerMenu {
             }
         });
 
-        // 玩家背包
-        for (int row = 0; row < 3; row++) {
-            for (int col = 0; col < 9; col++) {
-                this.addSlot(new Slot(inventory, col + row * 9 + 9, 8 + col * 18, 140 + row * 18));
-            }
-        }
+        // 只放物品栏那一行（9 格）。
+        // 需求是"不显示背包"，所以主背包那 27 格不加进菜单。
         for (int col = 0; col < 9; col++) {
-            this.addSlot(new Slot(inventory, col, 8 + col * 18, 198));
+            this.addSlot(new Slot(inventory, col, INV_U + 1 + col * 18, INV_V + 1));
+        }
+
+        refreshLuck();
+    }
+
+    /** 读一次运气，供界面显示。 */
+    private void refreshLuck() {
+        if (owner != null) {
+            luckPercent = WashLuck.get(owner.server).get(owner) / 100;
         }
     }
 
-    /**
-     * 能不能放进洗炼槽。
-     *
-     * <p>要求：已附魔、有耐久（工具/武器），且不是书。护甲也算有耐久，
-     * 但需求写的是"武器或者工具"，所以额外排除护甲。</p>
-     */
     public static boolean isWashable(ItemStack stack) {
         if (stack.isEmpty() || !stack.isDamageableItem()) {
             return false;
@@ -145,13 +151,10 @@ public class WashStoneMenu extends AbstractContainerMenu {
         return !stack.getEnchantments().isEmpty();
     }
 
-    /** 输入槽内容变化：重算词条，清掉候选与锁定。 */
     private void onInputChanged() {
         entries.clear();
         candidates.clear();
         selected = -1;
-        // 只有还没锁定时才允许重算；锁定后槽位本来也动不了，
-        // 这里多一层保险，避免任何路径把候选清掉却已经扣了石头
         if (locked) {
             sync();
             return;
@@ -164,33 +167,31 @@ public class WashStoneMenu extends AbstractContainerMenu {
             }
             entries.sort((a, b) -> nameOf(a).getString().compareTo(nameOf(b).getString()));
         }
+        refreshLuck();
         broadcastChanges();
         sync();
     }
 
     /**
-     * 附魔的显示名。
+     * 附魔显示名，等级用<b>传入的</b> level。
      *
-     * <p>用 {@code Enchantment.getFullname} —— 它读的是 {@code Enchantment#description}
-     * 这个 Component 字段，并自动补上罗马数字等级，和原版附魔书完全一致。
-     * <b>不要</b>自己拼 {@code enchantment.<命名空间>.<路径>}：那只是 id 的巧合映射，
-     * 模组附魔或自定义 description 会解析失败，界面上就出现一整串英文标识。</p>
+     * <p>这里必须显式传 level：候选是"物品上还没有的附魔"，
+     * 若拿 {@code levelOf(holder)} 去取，永远是 0，界面就会显示成没有等级，
+     * 而实际写入用的是候选自己的等级 —— 显示与实际不一致。</p>
      */
     public Component displayNameOf(Holder<Enchantment> holder, int level) {
-        return Enchantment.getFullname(holder, level);
+        return Enchantment.getFullname(holder, Math.max(1, level));
     }
 
-    /** 词条列表里的显示名（等级取自当前物品）。 */
+    /** 词条列表用：等级就是物品上那条的实际等级。 */
     public Component displayNameOf(Holder<Enchantment> holder) {
         return displayNameOf(holder, Math.max(1, levelOf(holder)));
     }
 
-    /** 排序用的名字，避免每次打开界面按钮顺序乱跳。 */
     private Component nameOf(Holder<Enchantment> holder) {
         return displayNameOf(holder);
     }
 
-    /** 某个附魔在当前输入物品上的等级；没有则是 0。 */
     public int levelOf(Holder<Enchantment> holder) {
         return container.getItem(SLOT_INPUT).getEnchantments().getLevel(holder);
     }
@@ -211,25 +212,26 @@ public class WashStoneMenu extends AbstractContainerMenu {
         return locked;
     }
 
+    public int luckPercent() {
+        return luckPercent;
+    }
+
     public InteractionHand hand() {
         return hand;
     }
 
-    /** 重新算一遍词条列表（界面刚打开时用）。 */
     public void refresh(ServerLevel level) {
         onInputChanged();
     }
 
     /**
-     * 玩家选了第 {@code index} 个词条。
-     *
-     * <p><b>这一步不可逆</b>：立刻扣掉洗炼石、锁死槽位、生成候选。</p>
+     * 玩家选了第 {@code index} 个词条：立刻扣石头、锁定、生成候选。
      *
      * @return 是否成功
      */
     public boolean chooseEntry(ServerLevel level, int index) {
         if (locked) {
-            return false;                       // 已经锁了，重复点击无效
+            return false;
         }
         if (index < 0 || index >= entries.size()) {
             return false;
@@ -238,26 +240,32 @@ public class WashStoneMenu extends AbstractContainerMenu {
         if (!isWashable(input)) {
             return false;
         }
-        // 手上得真的有洗炼石
         ItemStack stone = menuPlayer.getItemInHand(hand);
         if (!(stone.getItem() instanceof WashStoneItem)) {
             return false;
         }
 
         Holder<Enchantment> target = entries.get(index);
-        int wanted = Math.max(1, input.getEnchantments().getLevel(target));
+        int baseLevel = Math.max(1, input.getEnchantments().getLevel(target));
+
+        // 运气：满了就这次全取最高等级
+        WashLuck luckData = owner != null ? WashLuck.get(owner.server) : null;
+        boolean useFull = luckData != null && owner != null && luckData.isFull(owner);
 
         candidates.clear();
-        candidates.addAll(rollCandidates(level, input, wanted));
+        candidates.addAll(rollCandidates(level, input, baseLevel, useFull));
         if (candidates.isEmpty()) {
-            // 没有可换的附魔：不锁定、不扣石头，避免白吃一颗
-            return false;
+            return false;   // 没有可换的：不锁定、不扣石头
         }
 
-        // 锁定 + 扣石头：两者必须同时发生
+        // 锁定 + 扣石头 + 推进运气
         stone.shrink(1);
         this.locked = true;
         this.selected = index;
+        if (luckData != null && owner != null) {
+            luckData.advance(owner, useFull, random);
+            refreshLuck();
+        }
 
         level.playSound(null, menuPlayer.blockPosition(), SoundEvents.ENCHANTMENT_TABLE_USE,
                 SoundSource.PLAYERS, 0.8F, 1.4F);
@@ -268,22 +276,23 @@ public class WashStoneMenu extends AbstractContainerMenu {
     }
 
     /**
-     * 随机出最多 {@link #CANDIDATE_COUNT} 条候选。
+     * 随机三条候选。
      *
-     * <p>规则：不与物品上已有的附魔重复（含正在被替换那条）、必须能附在这件物品上、
-     * 等级沿用被替换那条但不超过候选自身上限。</p>
+     * @param baseLevel 原附魔等级，候选在 ±1 内浮动
+     * @param maxRoll   true 表示运气满了：全部取最高等级
      */
-    private List<Candidate> rollCandidates(ServerLevel level, ItemStack input, int wanted) {
+    private List<Candidate> rollCandidates(ServerLevel level, ItemStack input,
+                                           int baseLevel, boolean maxRoll) {
         ItemEnchantments existing = input.getEnchantments();
         List<Holder<Enchantment>> pool = new ArrayList<>();
 
         for (Holder<Enchantment> holder : level.registryAccess()
                 .registryOrThrow(Registries.ENCHANTMENT).holders().toList()) {
             if (existing.getLevel(holder) > 0) {
-                continue;
+                continue;                       // 不与已有附魔重复
             }
             if (!input.supportsEnchantment(holder)) {
-                continue;
+                continue;                       // 必须能附在这件物品上
             }
             pool.add(holder);
         }
@@ -295,21 +304,28 @@ public class WashStoneMenu extends AbstractContainerMenu {
 
         List<Candidate> picked = new ArrayList<>(CANDIDATE_COUNT);
         for (int i = 0; i < pool.size() && picked.size() < CANDIDATE_COUNT; i++) {
-            Holder<Enchantment> holder = pool.get(i);
-            int max = Math.max(1, holder.value().getMaxLevel());
-            picked.add(new Candidate(holder, Math.min(wanted, max)));
+            picked.add(new Candidate(pool.get(i), pickLevel(pool.get(i), baseLevel, maxRoll)));
         }
         return picked;
     }
 
     /**
-     * 玩家选了第 {@code index} 个候选：替换附魔。
+     * 按 ±1 规则取一个合法等级。
      *
-     * <p>洗炼石已经在 {@link #chooseEntry} 里扣过了，这里<b>不再扣</b>。
-     * 仍然要重新校验输入物品和候选，防止下标越界或状态被改。</p>
-     *
-     * @return 是否替换成功
+     * <p>基准是原附魔等级，先在 {@code base-1 .. base+1} 里随机，再夹到
+     * {@code [1, 该附魔最大等级]}。运气满时直接取最大值。</p>
      */
+    private int pickLevel(Holder<Enchantment> holder, int baseLevel, boolean maxRoll) {
+        int max = Math.max(1, holder.value().getMaxLevel());
+        if (maxRoll) {
+            return max;
+        }
+        int offset = random.nextInt(3) - 1;     // -1 / 0 / +1
+        int target = baseLevel + offset;
+        return Math.max(1, Math.min(target, max));
+    }
+
+    /** 选了候选：替换附魔。洗炼石已在 chooseEntry 扣过。 */
     public boolean applyCandidate(ServerPlayer player, int index) {
         if (!locked || selected < 0 || selected >= entries.size()) {
             return false;
@@ -330,7 +346,6 @@ public class WashStoneMenu extends AbstractContainerMenu {
         mutable.set(picked.enchantment(), picked.level());
         input.set(DataComponents.ENCHANTMENTS, mutable.toImmutable());
 
-        // 洗完后解锁，物品可以取走了；候选清空避免重复应用
         candidates.clear();
         entries.clear();
         selected = -1;
@@ -357,20 +372,12 @@ public class WashStoneMenu extends AbstractContainerMenu {
 
     @Override
     public void removed(Player player) {
-        // 先归还槽里的物品，再让父类收尾。
-        // 锁定期间 mayPickup 为 false，但关界面时仍然要还给玩家，不能吞掉装备。
         if (!player.level().isClientSide()) {
             clearContainer(player, container);
         }
         super.removed(player);
     }
 
-    /**
-     * 不检查"手上还拿着洗炼石"。
-     *
-     * <p>洗完或锁定后石头就没了，若在这里校验，界面会被原版立刻强制关闭，
-     * 玩家看不到结果。真正的校验在 {@link #chooseEntry} 里。</p>
-     */
     @Override
     public boolean stillValid(Player player) {
         return true;

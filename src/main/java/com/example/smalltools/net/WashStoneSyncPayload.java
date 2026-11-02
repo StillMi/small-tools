@@ -33,7 +33,8 @@ public record WashStoneSyncPayload(int containerId,
                                    List<Entry> entries,
                                    int selected,
                                    List<Entry> candidates,
-                                   boolean locked) implements CustomPacketPayload {
+                                   boolean locked,
+                                   int luckPercent) implements CustomPacketPayload {
 
     /**
      * 一条附魔。
@@ -60,6 +61,7 @@ public record WashStoneSyncPayload(int containerId,
                     ByteBufCodecs.VAR_INT, WashStoneSyncPayload::selected,
                     Entry.STREAM_CODEC.apply(ByteBufCodecs.list()), WashStoneSyncPayload::candidates,
                     ByteBufCodecs.BOOL, WashStoneSyncPayload::locked,
+                    ByteBufCodecs.VAR_INT, WashStoneSyncPayload::luckPercent,
                     WashStoneSyncPayload::new);
 
     @Override
@@ -75,12 +77,16 @@ public record WashStoneSyncPayload(int containerId,
         }
         List<Entry> candidates = new ArrayList<>();
         for (var candidate : menu.candidates()) {
+            // 关键：用候选自己的 level 生成名字。
+            // 之前只传了 enchantment，内部退回 levelOf() —— 而候选是物品上还没有的
+            // 附魔，levelOf 永远是 0，结果界面显示不带等级、实际却写入了等级。
             candidates.add(new Entry(
-                    menu.displayNameOf(candidate.enchantment()), candidate.level()));
+                    menu.displayNameOf(candidate.enchantment(), candidate.level()),
+                    candidate.level()));
         }
         PacketDistributor.sendToPlayer(player,
                 new WashStoneSyncPayload(menu.containerId, entries, menu.selected(),
-                        candidates, menu.locked()));
+                        candidates, menu.locked(), menu.luckPercent()));
     }
 
     /** 客户端收到后交给界面渲染。 */

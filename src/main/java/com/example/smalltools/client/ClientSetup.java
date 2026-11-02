@@ -22,6 +22,11 @@ public final class ClientSetup {
     }
 
     @SubscribeEvent
+    public static void onRegisterScreens(net.neoforged.neoforge.client.event.RegisterMenuScreensEvent event) {
+        event.register(com.example.smalltools.SmallTools.WASH_STONE_MENU.get(), WashStoneScreen::new);
+    }
+
+    @SubscribeEvent
     public static void onRegisterGuiLayers(RegisterGuiLayersEvent event) {
         event.registerAbove(VanillaGuiLayers.EXPERIENCE_BAR,
                 ResourceLocation.fromNamespaceAndPath(SmallTools.MODID, "channel_bar"),

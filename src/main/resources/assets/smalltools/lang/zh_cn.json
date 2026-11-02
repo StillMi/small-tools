@@ -40,5 +40,14 @@
   "tooltip.smalltools.portal_stone.set_hint": "潜行 + 右键设定坐标（只能设定一次）",
   "message.smalltools.target_not_supported": "这块石头不能设定坐标。",
   "message.smalltools.target_locked": "这块石头已经绑定过坐标，不能再改。",
-  "itemGroup.smalltools": "StillMi 的小工具"
+  "itemGroup.smalltools": "StillMi 的小工具",
+  "item.smalltools.wash_stone": "附魔洗炼石",
+  "container.smalltools.wash_stone": "附魔洗炼",
+  "tooltip.smalltools.wash_stone": "放入一件已附魔的武器或工具，把其中一个附魔换成随机的新附魔",
+  "tooltip.smalltools.wash_stone.hint": "等级保持不变，且不会随机到物品上已有的附魔",
+  "screen.smalltools.wash.insert": "把已附魔的武器或工具放进槽里",
+  "screen.smalltools.wash.pick_entry": "选一个要替换的附魔",
+  "screen.smalltools.wash.pick_candidate": "选一个新附魔（洗炼石会被消耗）",
+  "message.smalltools.wash.done": "洗炼完成",
+  "message.smalltools.wash.no_candidate": "没有可替换的附魔了"
 }

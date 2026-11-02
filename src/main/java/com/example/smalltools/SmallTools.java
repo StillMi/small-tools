@@ -5,6 +5,8 @@ import com.example.smalltools.block.RemotePortalBlockEntity;
 import com.example.smalltools.item.AbstractPortalStoneItem;
 import com.example.smalltools.item.DungeonPortalStoneItem;
 import com.example.smalltools.item.PortalStoneItem;
+import com.example.smalltools.item.WashStoneItem;
+import com.example.smalltools.menu.WashStoneMenu;
 import com.example.smalltools.net.SetTargetPayload;
 import com.example.smalltools.portal.PortalTeleports;
 import com.mojang.serialization.Codec;
@@ -16,6 +18,7 @@ import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Rarity;
+import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
@@ -25,11 +28,13 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.common.extensions.IMenuTypeExtension;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
+import net.neoforged.neoforge.common.extensions.IMenuTypeExtension;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 /**
@@ -50,6 +55,9 @@ public class SmallTools {
     public static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(MODID);
     public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES =
             DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MODID);
+    public static final DeferredRegister<MenuType<?>> MENUS =
+            DeferredRegister.create(Registries.MENU, MODID);
+
     public static final DeferredRegister.DataComponents DATA_COMPONENTS =
             DeferredRegister.createDataComponents(Registries.DATA_COMPONENT_TYPE, MODID);
 
@@ -85,6 +93,19 @@ public class SmallTools {
             "dungeon_portal_stone",
             DungeonPortalStoneItem::new,
             new Item.Properties().durability(AbstractPortalStoneItem.MAX_USES).rarity(Rarity.EPIC));
+
+    /**
+     * 附魔洗炼石：右键打开界面，把一条附魔换成随机的另一条（同级）。
+     */
+    public static final DeferredItem<WashStoneItem> WASH_STONE = ITEMS.registerItem(
+            "wash_stone",
+            WashStoneItem::new,
+            new Item.Properties().rarity(Rarity.UNCOMMON));
+
+    /** 洗炼界面。交互手要随菜单一起带过去，所以用 IMenuTypeExtension 的扩展工厂。 */
+    public static final DeferredHolder<MenuType<?>, MenuType<WashStoneMenu>> WASH_STONE_MENU =
+            MENUS.register("wash_stone", () -> IMenuTypeExtension.create(
+                    (id, inventory, data) -> new WashStoneMenu(id, inventory, data.readEnum(net.minecraft.world.InteractionHand.class))));
 
     /**
      * 传送门方块：无碰撞、自带光源、可破坏（破坏即让整对门失效），不掉落任何东西。
@@ -125,6 +146,7 @@ public class SmallTools {
                     .displayItems((parameters, output) -> {
                         output.accept(PORTAL_STONE.get());
                         output.accept(DUNGEON_PORTAL_STONE.get());
+                        output.accept(WASH_STONE.get());
                     })
                     .build());
 
@@ -134,6 +156,7 @@ public class SmallTools {
         BLOCK_ENTITIES.register(modEventBus);
         DATA_COMPONENTS.register(modEventBus);
         CREATIVE_TABS.register(modEventBus);
+        MENUS.register(modEventBus);
 
         modEventBus.addListener(this::registerPayloads);
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
@@ -145,7 +168,16 @@ public class SmallTools {
 
     /** 客户端改坐标 → 服务端落库。 */
     private void registerPayloads(RegisterPayloadHandlersEvent event) {
-        event.registrar("1").playToServer(
+        var registrar = event.registrar("1");
+        registrar.playToServer(
                 SetTargetPayload.TYPE, SetTargetPayload.STREAM_CODEC, SetTargetPayload::handle);
+        registrar.playToServer(
+                com.example.smalltools.net.WashActionPayload.TYPE,
+                com.example.smalltools.net.WashActionPayload.STREAM_CODEC,
+                com.example.smalltools.net.WashActionPayload::handle);
+        registrar.playToClient(
+                com.example.smalltools.net.WashStoneSyncPayload.TYPE,
+                com.example.smalltools.net.WashStoneSyncPayload.STREAM_CODEC,
+                com.example.smalltools.net.WashStoneSyncPayload::handle);
     }
 }

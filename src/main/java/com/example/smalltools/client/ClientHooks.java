@@ -24,6 +24,14 @@ public final class ClientHooks {
     private ClientHooks() {
     }
 
+    /** 洗炼界面收到服务端推来的状态，转交给当前界面。 */
+    public static void onWashSync(com.example.smalltools.net.WashStoneSyncPayload payload) {
+        if (net.minecraft.client.Minecraft.getInstance().screen
+                instanceof WashStoneScreen screen) {
+            screen.accept(payload);
+        }
+    }
+
     /** 打开目标坐标输入界面。只应在客户端调用。 */
     public static void openTargetScreen(InteractionHand hand) {
         PortalTargetScreen.open(hand);

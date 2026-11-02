@@ -40,5 +40,14 @@
   "tooltip.smalltools.portal_stone.set_hint": "Sneak + right-click to set the target (once only)",
   "message.smalltools.target_not_supported": "This stone cannot be given a target.",
   "message.smalltools.target_locked": "This stone already has a target and cannot be changed.",
-  "itemGroup.smalltools": "StillMi's Small Tools"
+  "itemGroup.smalltools": "StillMi's Small Tools",
+  "item.smalltools.wash_stone": "Enchantment Wash Stone",
+  "container.smalltools.wash_stone": "Enchantment Washing",
+  "tooltip.smalltools.wash_stone": "Insert an enchanted tool or weapon to reroll one of its enchantments",
+  "tooltip.smalltools.wash_stone.hint": "The level is kept, and the result never duplicates an existing enchantment",
+  "screen.smalltools.wash.insert": "Insert an enchanted tool or weapon",
+  "screen.smalltools.wash.pick_entry": "Pick an enchantment to replace",
+  "screen.smalltools.wash.pick_candidate": "Pick a new enchantment (consumes the stone)",
+  "message.smalltools.wash.done": "Washing complete",
+  "message.smalltools.wash.no_candidate": "No enchantments left to offer"
 }

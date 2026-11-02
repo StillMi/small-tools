@@ -181,6 +181,67 @@ def make_dungeon_item() -> Image.Image:
     return img
 
 
+
+def make_wash_item() -> Image.Image:
+    """附魔洗炼石：青白色的六边形结晶，中间一道流动的洗练波纹。
+
+    和另外两颗石头区分开：那颗是灰紫、那颗是紫色带火，这颗走"青白 + 金边"，
+    一眼能看出是消耗品而不是传送石。
+    """
+    img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
+    px = img.load()
+
+    cx, cy = 8.0, 8.0
+    # 六边形轮廓：按角度取半径，做出宝石切面感
+    def inside(x: int, y: int) -> bool:
+        dx = x + 0.5 - cx
+        dy = y + 0.5 - cy
+        if math.hypot(dx, dy) > 6.6:
+            return False
+        a = math.atan2(dy, dx)
+        edge = 6.0 + 0.9 * math.cos(a * 6.0)
+        return math.hypot(dx, dy) <= edge
+
+    depth = {
+        0: (18, 52, 62, 255),      # 外描边
+        1: (32, 92, 106, 255),     # 暗面
+        2: (66, 148, 162, 255),
+        3: (120, 198, 208, 255),
+        4: (196, 238, 240, 255),   # 亮面
+    }
+
+    random.seed(37)
+    for y in range(SIZE):
+        for x in range(SIZE):
+            if not inside(x, y):
+                continue
+            edge = any(not inside(x + dx, y + dy)
+                       for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+            if edge:
+                px[x, y] = depth[0]
+                continue
+            # 左上亮、右下暗，做出体积感
+            t = ((x - 3) + (y - 3)) / 20.0
+            idx = 4 - int(t * 2.6) + random.choice([0, 0, 1, -1])
+            px[x, y] = depth[max(1, min(4, idx))]
+
+    # 中间一道洗练波纹：横向的亮线，两端渐隐
+    for y in range(SIZE):
+        for x in range(SIZE):
+            if not inside(x, y):
+                continue
+            wave = math.sin((x - cx) * 0.9) * 1.1
+            if abs((y + 0.5) - (cy + wave)) < 0.9 and abs(x + 0.5 - cx) < 4.6:
+                px[x, y] = (236, 252, 255, 255)
+
+    # 一点金色描边高光，暗示"金块"的来历
+    for (x, y) in ((5, 4), (6, 4), (10, 11), (11, 11)):
+        if inside(x, y):
+            px[x, y] = (255, 226, 138, 255)
+
+    return img
+
+
 def main() -> None:
     item_dir = os.path.join(ROOT, "item")
     os.makedirs(item_dir, exist_ok=True)
@@ -188,6 +249,7 @@ def main() -> None:
     targets = {
         os.path.join(item_dir, "portal_stone.png"): make_item(),
         os.path.join(item_dir, "dungeon_portal_stone.png"): make_dungeon_item(),
+        os.path.join(item_dir, "wash_stone.png"): make_wash_item(),
     }
 
     for path, image in targets.items():

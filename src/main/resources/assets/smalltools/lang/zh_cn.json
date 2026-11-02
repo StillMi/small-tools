@@ -49,5 +49,8 @@
   "screen.smalltools.wash.pick_entry": "选一个要替换的附魔",
   "screen.smalltools.wash.pick_candidate": "选一个新附魔（洗炼石会被消耗）",
   "message.smalltools.wash.done": "洗炼完成",
-  "message.smalltools.wash.no_candidate": "没有可替换的附魔了"
+  "message.smalltools.wash.no_candidate": "没有可替换的附魔了",
+  "screen.smalltools.wash.warning": "⚠ 点附魔后不可取消，洗炼石将被消耗",
+  "screen.smalltools.wash.consumed": "洗炼石已消耗，请选择一个新附魔",
+  "screen.smalltools.wash.no_candidate": "没有可替换的附魔"
 }

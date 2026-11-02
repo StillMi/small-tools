@@ -3,6 +3,8 @@ package com.example.smalltools.net;
 import com.example.smalltools.SmallTools;
 import com.example.smalltools.menu.WashStoneMenu;
 import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -17,22 +19,32 @@ import java.util.List;
 /**
  * 服务端 → 客户端：洗炼界面的当前状态。
  *
- * <p>带三样东西：输入物品上的所有<b>词条</b>、已选中的词条下标、三条<b>候选</b>。</p>
+ * <h2>为什么直接传显示名</h2>
  *
- * <p>只传 {@code ResourceLocation} 和 {@code int}，客户端自己拼显示名
- * （{@code enchantment.<命名空间>.<路径>}）。这样客户端不用查注册表，
- * 也不会因为两边注册表编号不同而错位。</p>
+ * <p>之前只传附魔 id，客户端自己拼 {@code enchantment.<命名空间>.<路径>} 这个翻译键。
+ * 但附魔的显示名在 1.21 里是 {@code Enchantment#description} 这个
+ * <b>Component 字段</b>，不一定等于由 id 推出来的键 —— 模组附魔、
+ * 或者用了自定义 description 的原版附魔都会解析失败，界面上就出现一整串生硬的英文标识。</p>
+ *
+ * <p>现在服务端用 {@code Enchantment.getFullname(holder, level)} 生成和原版附魔书
+ * 完全一致的名称（含罗马数字等级），直接作为 {@link Component} 发过来。</p>
  */
 public record WashStoneSyncPayload(int containerId,
                                    List<Entry> entries,
                                    int selected,
-                                   List<Entry> candidates) implements CustomPacketPayload {
+                                   List<Entry> candidates,
+                                   boolean locked) implements CustomPacketPayload {
 
-    /** 一条附魔：id 与等级。 */
-    public record Entry(ResourceLocation id, int level) {
+    /**
+     * 一条附魔。
+     *
+     * @param name  已经渲染好的显示名（服务端生成，带等级）
+     * @param level 等级，客户端可能用来做额外排版
+     */
+    public record Entry(Component name, int level) {
         public static final StreamCodec<RegistryFriendlyByteBuf, Entry> STREAM_CODEC =
                 StreamCodec.composite(
-                        ResourceLocation.STREAM_CODEC, Entry::id,
+                        ComponentSerialization.STREAM_CODEC, Entry::name,
                         ByteBufCodecs.VAR_INT, Entry::level,
                         Entry::new);
     }
@@ -47,6 +59,7 @@ public record WashStoneSyncPayload(int containerId,
                     Entry.STREAM_CODEC.apply(ByteBufCodecs.list()), WashStoneSyncPayload::entries,
                     ByteBufCodecs.VAR_INT, WashStoneSyncPayload::selected,
                     Entry.STREAM_CODEC.apply(ByteBufCodecs.list()), WashStoneSyncPayload::candidates,
+                    ByteBufCodecs.BOOL, WashStoneSyncPayload::locked,
                     WashStoneSyncPayload::new);
 
     @Override
@@ -58,16 +71,16 @@ public record WashStoneSyncPayload(int containerId,
     public static void send(ServerPlayer player, WashStoneMenu menu) {
         List<Entry> entries = new ArrayList<>();
         for (var holder : menu.entries()) {
-            holder.unwrapKey().ifPresent(key ->
-                    entries.add(new Entry(key.location(), menu.levelOf(holder))));
+            entries.add(new Entry(menu.displayNameOf(holder), menu.levelOf(holder)));
         }
         List<Entry> candidates = new ArrayList<>();
         for (var candidate : menu.candidates()) {
-            candidate.enchantment().unwrapKey().ifPresent(key ->
-                    candidates.add(new Entry(key.location(), candidate.level())));
+            candidates.add(new Entry(
+                    menu.displayNameOf(candidate.enchantment()), candidate.level()));
         }
         PacketDistributor.sendToPlayer(player,
-                new WashStoneSyncPayload(menu.containerId, entries, menu.selected(), candidates));
+                new WashStoneSyncPayload(menu.containerId, entries, menu.selected(),
+                        candidates, menu.locked()));
     }
 
     /** 客户端收到后交给界面渲染。 */

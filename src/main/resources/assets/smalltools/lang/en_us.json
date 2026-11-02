@@ -53,5 +53,6 @@
   "screen.smalltools.wash.warning": "⚠ Picking an enchantment is permanent and consumes the stone",
   "screen.smalltools.wash.consumed": "Stone consumed — choose a new enchantment",
   "screen.smalltools.wash.no_candidate": "No enchantments available",
-  "screen.smalltools.wash.luck": "Wash luck: %s%%"
+  "screen.smalltools.wash.luck": "Wash luck: %s%%",
+  "screen.smalltools.wash.luck.ready": "Wash luck: FULL — next roll is max level"
 }

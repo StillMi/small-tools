@@ -251,8 +251,11 @@ public class WashStoneScreen extends AbstractContainerScreen<WashStoneMenu> {
         int centerX = this.leftPos + PANEL_W / 2;
         boolean full = this.luckPercent >= 100;
 
-        graphics.drawString(this.font,
-                Component.translatable("screen.smalltools.wash.luck", this.luckPercent),
+        // 满值时换一条文案，明确"下一次必定最高等级"
+        Component luckText = full
+                ? Component.translatable("screen.smalltools.wash.luck.ready")
+                : Component.translatable("screen.smalltools.wash.luck", this.luckPercent);
+        graphics.drawString(this.font, luckText,
                 this.leftPos + 20, this.topPos + 20, full ? GOLD : MUTED, false);
 
         graphics.fill(this.leftPos + 16, this.topPos + 86,

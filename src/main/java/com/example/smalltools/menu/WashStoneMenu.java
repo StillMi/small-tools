@@ -6,6 +6,7 @@ import com.example.smalltools.portal.WashLuck;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.tags.EnchantmentTags;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -250,7 +251,9 @@ public class WashStoneMenu extends AbstractContainerMenu {
 
         // 运气：满了就这次全取最高等级
         WashLuck luckData = owner != null ? WashLuck.get(owner.server) : null;
-        boolean useFull = luckData != null && owner != null && luckData.isFull(owner);
+        // 只看"待生效标记"，不看进度数值：
+        // 数值可能因为已攒满而停在 100%，但那一次用完就清零，不能拿它判断
+        boolean useFull = luckData != null && owner != null && luckData.isArmed(owner);
 
         candidates.clear();
         candidates.addAll(rollCandidates(level, input, baseLevel, useFull));
@@ -258,14 +261,17 @@ public class WashStoneMenu extends AbstractContainerMenu {
             return false;   // 没有可换的：不锁定、不扣石头
         }
 
-        // 锁定 + 扣石头 + 推进运气
-        stone.shrink(1);
-        this.locked = true;
-        this.selected = index;
+        // 先推进运气，再扣石头。
+        // 顺序反过来的话，万一 advance 抛异常，石头已经没了但运气没记上。
         if (luckData != null && owner != null) {
             luckData.advance(owner, useFull, random);
             refreshLuck();
         }
+
+        // 锁定 + 扣石头
+        stone.shrink(1);
+        this.locked = true;
+        this.selected = index;
 
         level.playSound(null, menuPlayer.blockPosition(), SoundEvents.ENCHANTMENT_TABLE_USE,
                 SoundSource.PLAYERS, 0.8F, 1.4F);
@@ -293,6 +299,11 @@ public class WashStoneMenu extends AbstractContainerMenu {
             }
             if (!input.supportsEnchantment(holder)) {
                 continue;                       // 必须能附在这件物品上
+            }
+            // 过滤负面附魔：绑定诅咒、消失诅咒都挂在这个标签下。
+            // 用原版标签而不是硬编码 id，这样模组加进来的诅咒也能一并滤掉。
+            if (holder.is(EnchantmentTags.CURSE)) {
+                continue;
             }
             pool.add(holder);
         }

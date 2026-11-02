@@ -139,16 +139,25 @@ public class WashStoneMenu extends AbstractContainerMenu {
         }
     }
 
+    /**
+     * 能不能放进洗炼槽。
+     *
+     * <p>规则只有一条：<b>有附魔就行</b>。工具、武器、护甲、三叉戟、弓、
+     * 甚至模组加的装备都算 —— 只要有附魔词条，就能拿来洗。</p>
+     *
+     * <p>不要求"可损耗"：附魔书虽然有附魔，但它是一个容器而不是被附魔的实体装备，
+     * 洗它的词条没有意义（而且会破坏书本身），所以排除；普通书不带附魔，
+     * 自然也不会通过。</p>
+     */
     public static boolean isWashable(ItemStack stack) {
-        if (stack.isEmpty() || !stack.isDamageableItem()) {
+        if (stack.isEmpty()) {
             return false;
         }
-        if (stack.is(Items.ENCHANTED_BOOK) || stack.is(Items.BOOK)) {
+        // 附魔书是"装着附魔的容器"，不是被附魔的物品，排除掉
+        if (stack.is(Items.ENCHANTED_BOOK)) {
             return false;
         }
-        if (stack.getItem() instanceof net.minecraft.world.item.ArmorItem) {
-            return false;
-        }
+        // 唯一硬条件：身上真的有附魔
         return !stack.getEnchantments().isEmpty();
     }
 

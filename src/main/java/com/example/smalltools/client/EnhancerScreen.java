@@ -74,7 +74,7 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
         this.addRenderableWidget(enhanceButton);
 
         investButton = MagicButton.create(
-                Button.builder(Component.translatable("screen.smalltools.enhancer.invest"),
+                Button.builder(investLabel(),
                                 b -> PacketDistributor.sendToServer(new EnhanceActionPayload(
                                         this.menu.containerId, EnhanceActionPayload.KIND_INVEST)))
                         .bounds(this.leftPos + (PANEL_W - 120) / 2,
@@ -84,6 +84,11 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
 
         PacketDistributor.sendToServer(new EnhanceActionPayload(
                 this.menu.containerId, EnhanceActionPayload.KIND_REFRESH));
+    }
+
+    /** 投入按钮上的文字：显示本次需要多少颗。 */
+    private Component investLabel() {
+        return Component.translatable("screen.smalltools.enhancer.invest", Math.max(1, this.cost));
     }
 
     public void accept(EnhancerSyncPayload payload) {
@@ -96,6 +101,9 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
         this.used = payload.used();
         this.fill = payload.fill();
         this.result = payload.result();
+        if (this.investButton != null) {
+            this.investButton.setMessage(investLabel());
+        }
     }
 
     @Override

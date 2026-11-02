@@ -70,10 +70,9 @@ public class EnhancerMenu extends AbstractContainerMenu {
     public static final int MAX_ENHANCES = 5;
 
     /**
-     * 完成第 n 次强化需要投入多少浓缩液态青金（n 从 1 开始）。
+     * 完成第 n 次强化需要的<b>液态青金个数</b>（n 从 1 开始）。
      *
-     * <p>曲线 1 / 3 / 7 / 11 / 16，合计 38。差值是 2、4、4、5 ——
-     * 越往后越贵，符合"要价一次比一次高"。</p>
+     * <p>1 / 3 / 7 / 11 / 16，合计 38。差值是 2、4、4、5，越往后越贵。</p>
      */
     public static int costForStep(int step) {
         return switch (step) {
@@ -147,7 +146,7 @@ public class EnhancerMenu extends AbstractContainerMenu {
         return stack.getOrDefault(SmallTools.ENHANCE_COUNT.get(), 0);
     }
 
-    /** 下一次强化需要几个凝造青金；已到上限时返回 0。 */
+    /** 下一次强化需要几个液态青金；已到上限时返回 0。 */
     public int costFor(ItemStack stack) {
         int count = enhanceCount(stack);
         if (count >= MAX_ENHANCES) {
@@ -160,6 +159,8 @@ public class EnhancerMenu extends AbstractContainerMenu {
     public int fillOf(ItemStack stack) {
         return stack.getOrDefault(SmallTools.ENHANCE_FILL.get(), 0);
     }
+
+
 
     /** 这件装备的强化次数是否已经用满。 */
     public boolean isExhausted(ItemStack stack) {
@@ -236,10 +237,10 @@ public class EnhancerMenu extends AbstractContainerMenu {
     // ------------------------------------------------------------------
 
     /**
-     * 投入一颗浓缩液态青金，为当前强化积攒经验。
+     * 一次性投入本次强化所需的全部液态青金。
      *
-     * <p>不再"点一下就强化"，要先投满进度。投入的进度存在物品上，
-     * 中途关界面不会白费。</p>
+     * <p>不是一颗一颗投 —— 点一下就把 {@link #costFor} 要求的数量全部扣掉，
+     * 同时把经验条填满。材料不够就什么都不做，只给提示。</p>
      *
      * @return 是否投入成功
      */
@@ -251,21 +252,22 @@ public class EnhancerMenu extends AbstractContainerMenu {
             return false;
         }
         int need = costFor(stack);
-        int have = fillOf(stack);
-        if (have >= need) {
+        if (fillOf(stack) >= need) {
             lastResult = "screen.smalltools.enhancer.ready";
             sync();
-            return false;      // 已经满了，别再浪费材料
+            return false;             // 已经满了，别再动材料
         }
-        if (lapisCount() < 1) {
+        // 数量不够就明确提示，绝不部分扣除
+        if (lapisCount() < need) {
             lastResult = "screen.smalltools.enhancer.no_material";
             sync();
             return false;
         }
-        if (!consumeLapis(1)) {
+        if (!consumeLapis(need)) {
             return false;
         }
-        stack.set(SmallTools.ENHANCE_FILL.get(), Math.min(need, have + 1));
+        // 扣成功后才填满经验条
+        stack.set(SmallTools.ENHANCE_FILL.get(), need);
 
         lastResult = "screen.smalltools.enhancer.invested";
         broadcastChanges();

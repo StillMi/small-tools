@@ -28,7 +28,7 @@ import java.util.List;
 public record EnhancerSyncPayload(int containerId,
                                   List<Entry> enchantments,
                                   int cost,
-                                  int lapis,
+                                  int packed2,
                                   int packed,
                                   Component result) implements CustomPacketPayload {
 
@@ -43,6 +43,19 @@ public record EnhancerSyncPayload(int containerId,
 
     public int fill() {
         return (this.packed >>> 8) & 0xFFFF;
+    }
+
+    /** 把 lapis / xpNeed 打包成第二个 int。 */
+    public static int pack2(int lapis, int xpNeed) {
+        return (lapis & 0xFFFF) | ((xpNeed & 0xFFFF) << 16);
+    }
+
+    public int lapis() {
+        return this.packed2 & 0xFFFF;
+    }
+
+    public int xpNeed() {
+        return (this.packed2 >>> 16) & 0xFFFF;
     }
 
     /** 一条附魔：显示名、等级、是否已满级。 */
@@ -64,7 +77,7 @@ public record EnhancerSyncPayload(int containerId,
                     ByteBufCodecs.VAR_INT, EnhancerSyncPayload::containerId,
                     Entry.STREAM_CODEC.apply(ByteBufCodecs.list()), EnhancerSyncPayload::enchantments,
                     ByteBufCodecs.VAR_INT, EnhancerSyncPayload::cost,
-                    ByteBufCodecs.VAR_INT, EnhancerSyncPayload::lapis,
+                    ByteBufCodecs.VAR_INT, EnhancerSyncPayload::packed2,
                     ByteBufCodecs.VAR_INT, EnhancerSyncPayload::packed,
                     ComponentSerialization.STREAM_CODEC, EnhancerSyncPayload::result,
                     EnhancerSyncPayload::new);
@@ -95,7 +108,8 @@ public record EnhancerSyncPayload(int containerId,
                 : Component.translatable(key);
 
         PacketDistributor.sendToPlayer(player, new EnhancerSyncPayload(
-                menu.containerId, list, menu.costFor(stack), menu.lapisCount(),
+                menu.containerId, list, menu.costFor(stack),
+                pack2(menu.lapisCount(), menu.xpNeedFor(stack)),
                 pack(menu.enhanceCount(stack), menu.fillOf(stack)), result));
     }
 

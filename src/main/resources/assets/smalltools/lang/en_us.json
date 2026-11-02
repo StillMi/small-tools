@@ -74,7 +74,7 @@
   "item.smalltools.liquid_lapis": "Concentrated Liquid Lapis",
   "tooltip.smalltools.liquid_lapis": "Enhancement fuel, smelted from lapis lazuli",
   "tooltip.smalltools.liquid_lapis.lore": "Lapis melts in the flame and condenses into a vial of flowing deep blue...",
-  "screen.smalltools.enhancer.invest": "Invest %s",
+  "screen.smalltools.enhancer.invest": "Invest %s (%s XP)",
   "screen.smalltools.enhancer.xp": "Enhancement XP: %s / %s",
   "screen.smalltools.enhancer.invested": "Invested — the bar is full",
   "screen.smalltools.enhancer.ready": "XP full — ready to enhance",

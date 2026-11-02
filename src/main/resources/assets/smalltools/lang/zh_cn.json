@@ -74,7 +74,7 @@
   "item.smalltools.liquid_lapis": "浓缩液态青金",
   "tooltip.smalltools.liquid_lapis": "强化时投入的材料，由青金石在熔炉中烧制",
   "tooltip.smalltools.liquid_lapis.lore": "青金在烈焰里化开，凝成一小瓶流动的深蓝……",
-  "screen.smalltools.enhancer.invest": "投入 %s 颗",
+  "screen.smalltools.enhancer.invest": "投入 %s 颗（%s 经验）",
   "screen.smalltools.enhancer.xp": "强化经验：%s / %s",
   "screen.smalltools.enhancer.invested": "已投入，经验条已充满",
   "screen.smalltools.enhancer.ready": "经验已满，可以强化了",

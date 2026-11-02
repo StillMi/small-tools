@@ -48,6 +48,7 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
     private int lapis;
     private int used;
     private int fill;
+    private int xpNeed;
     private Component result = Component.empty();
 
     private Button enhanceButton;
@@ -86,9 +87,10 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
                 this.menu.containerId, EnhanceActionPayload.KIND_REFRESH));
     }
 
-    /** 投入按钮上的文字：显示本次需要多少颗。 */
+    /** 投入按钮上的文字：显示本次需要多少颗（括号里是换算出的经验）。 */
     private Component investLabel() {
-        return Component.translatable("screen.smalltools.enhancer.invest", Math.max(1, this.cost));
+        return Component.translatable("screen.smalltools.enhancer.invest",
+                Math.max(1, this.cost), Math.max(1, this.xpNeed));
     }
 
     public void accept(EnhancerSyncPayload payload) {
@@ -100,6 +102,7 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
         this.lapis = payload.lapis();
         this.used = payload.used();
         this.fill = payload.fill();
+        this.xpNeed = payload.xpNeed();
         this.result = payload.result();
         if (this.investButton != null) {
             this.investButton.setMessage(investLabel());
@@ -214,7 +217,7 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
         // ---- 经验条：投入浓缩液态青金填充 ----
         int xpV = this.topPos + 182;
         int xpH = 8;
-        int need = Math.max(1, this.cost);
+        int need = Math.max(1, this.xpNeed);
         float ratio = Mth.clamp(this.fill / (float) need, 0.0F, 1.0F);
         boolean ready = this.fill >= need && !exhausted;
 

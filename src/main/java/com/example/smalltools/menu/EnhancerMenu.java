@@ -69,19 +69,34 @@ public class EnhancerMenu extends AbstractContainerMenu {
     /** 每件装备最多强化几次。 */
     public static final int MAX_ENHANCES = 5;
 
+    /** 一颗液态青金折算多少强化经验。 */
+    public static final int XP_PER_LAPIS = 5;
+
     /**
-     * 完成第 n 次强化需要的<b>液态青金个数</b>（n 从 1 开始）。
+     * 完成第 n 次强化需要的<b>强化经验点</b>（n 从 1 开始）。
      *
-     * <p>1 / 3 / 7 / 11 / 16，合计 38。差值是 2、4、4、5，越往后越贵。</p>
+     * <p>10 / 30 / 70 / 110 / 160，合计 380 点。
+     * 一颗液态青金折算 {@link #XP_PER_LAPIS} 点，所以实际要投
+     * 2 / 6 / 14 / 22 / 32 颗。</p>
      */
-    public static int costForStep(int step) {
+    public static int xpForStep(int step) {
         return switch (step) {
-            case 1 -> 1;
-            case 2 -> 3;
-            case 3 -> 7;
-            case 4 -> 11;
-            default -> 16;
+            case 1 -> 10;
+            case 2 -> 30;
+            case 3 -> 70;
+            case 4 -> 110;
+            default -> 160;
         };
+    }
+
+    /**
+     * 第 n 次强化需要投入几颗液态青金。
+     *
+     * <p>向上取整：经验需求不能被 5 整除时，也要收够整颗，
+     * 否则会出现"差 1 点经验却没有零碎青金"的死角。</p>
+     */
+    public static int lapisForStep(int step) {
+        return (xpForStep(step) + XP_PER_LAPIS - 1) / XP_PER_LAPIS;
     }
 
     private final InteractionHand hand;
@@ -146,13 +161,22 @@ public class EnhancerMenu extends AbstractContainerMenu {
         return stack.getOrDefault(SmallTools.ENHANCE_COUNT.get(), 0);
     }
 
-    /** 下一次强化需要几个液态青金；已到上限时返回 0。 */
+    /** 下一次强化需要投入几颗液态青金；已到上限时返回 0。 */
     public int costFor(ItemStack stack) {
         int count = enhanceCount(stack);
         if (count >= MAX_ENHANCES) {
             return 0;
         }
-        return costForStep(count + 1);
+        return lapisForStep(count + 1);
+    }
+
+    /** 下一次强化需要的强化经验点总量。 */
+    public int xpNeedFor(ItemStack stack) {
+        int count = enhanceCount(stack);
+        if (count >= MAX_ENHANCES) {
+            return 0;
+        }
+        return xpForStep(count + 1);
     }
 
     /** 这件物品当前已投入的强化经验。 */
@@ -215,8 +239,8 @@ public class EnhancerMenu extends AbstractContainerMenu {
         if (!hasWork(stack)) {
             return false;      // 所有附魔都满级且不需要补
         }
-        // 进度攒满才算"可以强化"
-        return fillOf(stack) >= costFor(stack);
+        // 经验攒满才算"可以强化"
+        return fillOf(stack) >= xpNeedFor(stack);
     }
 
     /** 这次强化是否还有实际可做的事（补附魔 or 升等级）。 */
@@ -251,23 +275,25 @@ public class EnhancerMenu extends AbstractContainerMenu {
             sync();
             return false;
         }
-        int need = costFor(stack);
-        if (fillOf(stack) >= need) {
+        int needXp = xpNeedFor(stack);
+        int needLapis = costFor(stack);
+
+        if (fillOf(stack) >= needXp) {
             lastResult = "screen.smalltools.enhancer.ready";
             sync();
             return false;             // 已经满了，别再动材料
         }
-        // 数量不够就明确提示，绝不部分扣除
-        if (lapisCount() < need) {
+        // 颗数不够就明确提示，绝不部分扣除
+        if (lapisCount() < needLapis) {
             lastResult = "screen.smalltools.enhancer.no_material";
             sync();
             return false;
         }
-        if (!consumeLapis(need)) {
+        if (!consumeLapis(needLapis)) {
             return false;
         }
-        // 扣成功后才填满经验条
-        stack.set(SmallTools.ENHANCE_FILL.get(), need);
+        // 扣成功后才填经验：最多填到需求值，多余的零头不浪费（向上取整会多出 0~4 点）
+        stack.set(SmallTools.ENHANCE_FILL.get(), needXp);
 
         lastResult = "screen.smalltools.enhancer.invested";
         broadcastChanges();
@@ -299,7 +325,7 @@ public class EnhancerMenu extends AbstractContainerMenu {
             return false;
         }
         // 进度没攒满就不给强化
-        if (fillOf(stack) < costFor(stack)) {
+        if (fillOf(stack) < xpNeedFor(stack)) {
             lastResult = "screen.smalltools.enhancer.not_ready";
             sync();
             return false;

@@ -118,7 +118,7 @@ public class WashStoneMenu extends AbstractContainerMenu {
         return !stack.getEnchantments().isEmpty();
     }
 
-    /** 输入槽内容变化：重算词条、清掉旧候选。 */
+    /** 输入槽内容变化：重算词条、清掉旧候选，并把结果推给客户端。 */
     private void onInputChanged() {
         entries.clear();
         candidates.clear();
@@ -135,6 +135,18 @@ public class WashStoneMenu extends AbstractContainerMenu {
                             .orElse("")));
         }
         broadcastChanges();
+
+        // 关键：把新词条推给客户端。
+        // 没有这一步，客户端拿不到任何词条，界面会一直停在"请放入物品"。
+        // owner 只有在服务端构造菜单时才非空，客户端构造时是 null，自然不会发。
+        sync();
+    }
+
+    /** 服务端把当前状态推给客户端；客户端侧什么都不做。 */
+    private void sync() {
+        if (owner != null) {
+            com.example.smalltools.net.WashStoneSyncPayload.send(owner, this);
+        }
     }
 
     /** 某个附魔在当前输入物品上的等级；没有则是 0。 */
@@ -276,22 +288,24 @@ public class WashStoneMenu extends AbstractContainerMenu {
 
     @Override
     public void removed(Player player) {
-        super.removed(player);
-        // 关界面时把槽里的东西还给玩家，不能吞掉别人的装备
+        // 先把槽里的东西还回去，再交给 super 收尾。
+        // 顺序不能反：super.removed 之后 menu 状态已经算关闭，再动容器容易被忽略。
+        //
+        // 用原版 clearContainer 而不是自己写 add / drop：
+        // 它把"放回背包失败就掉在地上"这套边界处理都做好了，
+        // 手写容易漏掉某一个分支，物品就凭空消失。
         if (!player.level().isClientSide()) {
-            ItemStack left = container.getItem(SLOT_INPUT);
-            if (!left.isEmpty()) {
-                if (!player.getInventory().add(left)) {
-                    player.drop(left, false);
-                }
-                container.setItem(SLOT_INPUT, ItemStack.EMPTY);
-            }
+            clearContainer(player, container);
         }
+        super.removed(player);
     }
 
     @Override
     public boolean stillValid(Player player) {
-        return player.getItemInHand(hand).getItem() instanceof WashStoneItem;
+        // 不要在这里检查"手上还拿着洗炼石"：
+        // 洗完炼石头就没了，界面会被立刻强制关闭，玩家看不到结果提示。
+        // 真正需要校验的地方是 applyCandidate（它自己会检查石头还在不在）。
+        return true;
     }
 
     @Override

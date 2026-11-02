@@ -6,6 +6,9 @@ import com.example.smalltools.item.AbstractPortalStoneItem;
 import com.example.smalltools.item.DungeonPortalStoneItem;
 import com.example.smalltools.item.PortalStoneItem;
 import com.example.smalltools.item.WashStoneItem;
+import com.example.smalltools.item.CondensedLapisItem;
+import com.example.smalltools.item.EnchantEnhancerItem;
+import com.example.smalltools.menu.EnhancerMenu;
 import com.example.smalltools.menu.WashStoneMenu;
 import com.example.smalltools.net.SetTargetPayload;
 import com.example.smalltools.portal.PortalTeleports;
@@ -77,6 +80,19 @@ public class SmallTools {
                             .networkSynchronized(BlockPos.STREAM_CODEC));
 
     /**
+     * 这件物品被强化器强化过几次。
+     *
+     * <p>存在物品自身上，因为成本要随同一件装备延续 ——
+     * 放玩家身上就会出现"换个人强化就变便宜"的漏洞。</p>
+     */
+    public static final DeferredHolder<DataComponentType<?>, DataComponentType<Integer>> ENHANCE_COUNT =
+            DATA_COMPONENTS.registerComponentType(
+                    "enhance_count",
+                    builder -> builder
+                            .persistent(com.mojang.serialization.Codec.INT)
+                            .networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.VAR_INT));
+
+    /**
      * 末影传送石：8 黑曜石 + 1 末影珍珠合成。
      * durability(N) 让"N 次开门"直接复用原版耐久机制，用满后物品自动销毁。
      */
@@ -101,6 +117,24 @@ public class SmallTools {
             "wash_stone",
             WashStoneItem::new,
             new Item.Properties().rarity(Rarity.UNCOMMON));
+
+    /** 附魔强化器：4 金块 + 4 钻石块 + 1 黑曜石。 */
+    public static final DeferredItem<EnchantEnhancerItem> ENHANCER = ITEMS.registerItem(
+            "enchant_enhancer",
+            EnchantEnhancerItem::new,
+            new Item.Properties().rarity(Rarity.RARE));
+
+    /** 凝造青金：8 青金石 + 1 原石，强化消耗材料。 */
+    public static final DeferredItem<CondensedLapisItem> CONDENSED_LAPIS = ITEMS.registerItem(
+            "condensed_lapis",
+            CondensedLapisItem::new,
+            new Item.Properties());
+
+    /** 强化界面。 */
+    public static final DeferredHolder<MenuType<?>, MenuType<EnhancerMenu>> ENHANCER_MENU =
+            MENUS.register("enchant_enhancer", () -> IMenuTypeExtension.create(
+                    (id, inventory, data) -> new EnhancerMenu(
+                            id, inventory, data.readEnum(net.minecraft.world.InteractionHand.class))));
 
     /** 洗炼界面。交互手要随菜单一起带过去，所以用 IMenuTypeExtension 的扩展工厂。 */
     public static final DeferredHolder<MenuType<?>, MenuType<WashStoneMenu>> WASH_STONE_MENU =
@@ -147,6 +181,8 @@ public class SmallTools {
                         output.accept(PORTAL_STONE.get());
                         output.accept(DUNGEON_PORTAL_STONE.get());
                         output.accept(WASH_STONE.get());
+                        output.accept(ENHANCER.get());
+                        output.accept(CONDENSED_LAPIS.get());
                     })
                     .build());
 
@@ -179,5 +215,13 @@ public class SmallTools {
                 com.example.smalltools.net.WashStoneSyncPayload.TYPE,
                 com.example.smalltools.net.WashStoneSyncPayload.STREAM_CODEC,
                 com.example.smalltools.net.WashStoneSyncPayload::handle);
+        registrar.playToServer(
+                com.example.smalltools.net.EnhanceActionPayload.TYPE,
+                com.example.smalltools.net.EnhanceActionPayload.STREAM_CODEC,
+                com.example.smalltools.net.EnhanceActionPayload::handle);
+        registrar.playToClient(
+                com.example.smalltools.net.EnhancerSyncPayload.TYPE,
+                com.example.smalltools.net.EnhancerSyncPayload.STREAM_CODEC,
+                com.example.smalltools.net.EnhancerSyncPayload::handle);
     }
 }

@@ -242,6 +242,98 @@ def make_wash_item() -> Image.Image:
     return img
 
 
+
+def make_enhancer_item() -> Image.Image:
+    """附魔强化器：金框包一颗蓝色核心，暗示"加压/强化"。
+
+    配色和凝造青金呼应（青蓝 + 金），和洗炼石的青白结晶区分开。
+    """
+    img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
+    px = img.load()
+    random.seed(71)
+
+    GOLD_D = (150, 108, 30, 255)
+    GOLD = (222, 176, 62, 255)
+    GOLD_L = (255, 224, 138, 255)
+    CORE_D = (28, 66, 110, 255)
+    CORE = (58, 130, 200, 255)
+    CORE_L = (150, 210, 255, 255)
+
+    # 外框：一圈金色方环
+    for y in range(SIZE):
+        for x in range(SIZE):
+            on_edge = x in (2,3,12,13) or y in (2,3,12,13)
+            near_edge = 1 < x < 14 and 1 < y < 14
+            if not near_edge:
+                continue
+            if on_edge:
+                # 左上亮、右下暗
+                top_left = (x + y) < 16
+                px[x, y] = GOLD_L if top_left else GOLD
+            elif x in (1,14) or y in (1,14):
+                px[x, y] = GOLD_D
+
+    # 中间核心：菱形
+    for y in range(SIZE):
+        for x in range(SIZE):
+            dx = abs(x + 0.5 - 8.0)
+            dy = abs(y + 0.5 - 8.0)
+            if dx + dy <= 3.4:
+                if dx + dy < 1.2:
+                    px[x, y] = CORE_L
+                elif dx + dy < 2.4:
+                    px[x, y] = CORE
+                else:
+                    px[x, y] = CORE_D
+
+    return img
+
+
+def make_condensed_lapis() -> Image.Image:
+    """凝造青金：深蓝多面结晶，带一点金色内光。"""
+    img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
+    px = img.load()
+    random.seed(83)
+
+    DEEP = (18, 34, 86, 255)
+    MID = (38, 74, 150, 255)
+    BRIGHT = (86, 132, 220, 255)
+    LIGHT = (168, 200, 255, 255)
+
+    def inside(x, y):
+        dx = x + 0.5 - 8.0
+        dy = y + 0.5 - 8.0
+        # 竖直拉长的菱形，像一颗被压实的晶体
+        return abs(dx) * 1.0 + abs(dy) * 0.72 <= 4.9
+
+    for y in range(SIZE):
+        for x in range(SIZE):
+            if not inside(x, y):
+                continue
+            if any(not inside(x+dx, y+dy) for dx, dy in ((1,0),(-1,0),(0,1),(0,-1))):
+                px[x, y] = DEEP
+                continue
+            dx = x + 0.5 - 8.0
+            dy = y + 0.5 - 8.0
+            # 左上靠亮
+            t = dx + dy
+            if t < -2.4:
+                px[x, y] = LIGHT
+            elif t < -0.6:
+                px[x, y] = BRIGHT
+            elif t < 1.8:
+                px[x, y] = MID
+            else:
+                px[x, y] = DEEP
+
+    # 一点金色内光，表示"凝结"过的能量
+    for (x, y) in ((7, 9), (8, 9), (8, 10)):
+        if inside(x, y):
+            px[x, y] = (255, 226, 138, 255)
+
+    return img
+
+
 def main() -> None:
     item_dir = os.path.join(ROOT, "item")
     os.makedirs(item_dir, exist_ok=True)
@@ -250,6 +342,8 @@ def main() -> None:
         os.path.join(item_dir, "portal_stone.png"): make_item(),
         os.path.join(item_dir, "dungeon_portal_stone.png"): make_dungeon_item(),
         os.path.join(item_dir, "wash_stone.png"): make_wash_item(),
+        os.path.join(item_dir, "enchant_enhancer.png"): make_enhancer_item(),
+        os.path.join(item_dir, "condensed_lapis.png"): make_condensed_lapis(),
     }
 
     for path, image in targets.items():

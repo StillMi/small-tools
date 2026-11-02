@@ -24,6 +24,7 @@ public final class ClientSetup {
     @SubscribeEvent
     public static void onRegisterScreens(net.neoforged.neoforge.client.event.RegisterMenuScreensEvent event) {
         event.register(com.example.smalltools.SmallTools.WASH_STONE_MENU.get(), WashStoneScreen::new);
+        event.register(com.example.smalltools.SmallTools.ENHANCER_MENU.get(), EnhancerScreen::new);
     }
 
     @SubscribeEvent

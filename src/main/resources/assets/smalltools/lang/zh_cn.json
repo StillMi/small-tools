@@ -55,5 +55,20 @@
   "screen.smalltools.wash.no_candidate": "没有可替换的附魔",
   "screen.smalltools.wash.luck": "洗炼运气：%s%%",
   "screen.smalltools.wash.luck.ready": "洗炼运气：已满 —— 下一次必定最高等级",
-  "tooltip.smalltools.wash_stone.lore": "据说它取自附魔台底下那层从未被人翻动的黑曜岩，攥在手里能听见旧咒语剥落的声音……"
+  "tooltip.smalltools.wash_stone.lore": "据说它取自附魔台底下那层从未被人翻动的黑曜岩，攥在手里能听见旧咒语剥落的声音……",
+  "item.smalltools.enchant_enhancer": "附魔强化器",
+  "item.smalltools.condensed_lapis": "凝造青金",
+  "container.smalltools.enhancer": "附魔强化",
+  "tooltip.smalltools.enhancer": "消耗凝造青金，随机强化物品上的一个附魔",
+  "tooltip.smalltools.enhancer.hint": "附魔不足 3 条时会先补充 1 级的随机附魔",
+  "tooltip.smalltools.enhancer.lore": "台座上的纹路会记住每一次强化，要价一次比一次高……",
+  "tooltip.smalltools.condensed_lapis": "附魔强化所需的材料",
+  "tooltip.smalltools.condensed_lapis.lore": "青金在石心深处凝了千年，才结成这么一小块……",
+  "screen.smalltools.enhancer.button": "强 化",
+  "screen.smalltools.enhancer.insert": "把已附魔的物品放进槽里",
+  "screen.smalltools.enhancer.have": "持有凝造青金：%s",
+  "screen.smalltools.enhancer.upgraded": "强化成功：一个附魔提升了一级",
+  "screen.smalltools.enhancer.filled": "强化成功：补充了一条 1 级附魔",
+  "screen.smalltools.enhancer.maxed": "所有附魔都已到上限，无法继续强化",
+  "screen.smalltools.enhancer.no_material": "凝造青金不足"
 }

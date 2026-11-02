@@ -32,6 +32,13 @@ public final class ClientHooks {
         }
     }
 
+    /** 强化界面收到服务端状态。 */
+    public static void onEnhancerSync(com.example.smalltools.net.EnhancerSyncPayload payload) {
+        if (net.minecraft.client.Minecraft.getInstance().screen instanceof EnhancerScreen screen) {
+            screen.accept(payload);
+        }
+    }
+
     /** 打开目标坐标输入界面。只应在客户端调用。 */
     public static void openTargetScreen(InteractionHand hand) {
         PortalTargetScreen.open(hand);

@@ -54,5 +54,6 @@
   "screen.smalltools.wash.consumed": "Stone consumed — choose a new enchantment",
   "screen.smalltools.wash.no_candidate": "No enchantments available",
   "screen.smalltools.wash.luck": "Wash luck: %s%%",
-  "screen.smalltools.wash.luck.ready": "Wash luck: FULL — next roll is max level"
+  "screen.smalltools.wash.luck.ready": "Wash luck: FULL — next roll is max level",
+  "tooltip.smalltools.wash_stone.lore": "Said to be cut from the obsidian beneath an enchanting table, never once disturbed by hand — hold it close and you can hear old enchantments peeling away..."
 }

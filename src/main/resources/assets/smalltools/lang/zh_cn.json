@@ -54,5 +54,6 @@
   "screen.smalltools.wash.consumed": "洗炼石已消耗，请选择一个新附魔",
   "screen.smalltools.wash.no_candidate": "没有可替换的附魔",
   "screen.smalltools.wash.luck": "洗炼运气：%s%%",
-  "screen.smalltools.wash.luck.ready": "洗炼运气：已满 —— 下一次必定最高等级"
+  "screen.smalltools.wash.luck.ready": "洗炼运气：已满 —— 下一次必定最高等级",
+  "tooltip.smalltools.wash_stone.lore": "据说它取自附魔台底下那层从未被人翻动的黑曜岩，攥在手里能听见旧咒语剥落的声音……"
 }

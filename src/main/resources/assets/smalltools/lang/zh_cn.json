@@ -39,5 +39,6 @@
   "tooltip.smalltools.portal_stone.no_target": "目标坐标：未绑定（使用配置文件默认值）",
   "tooltip.smalltools.portal_stone.set_hint": "潜行 + 右键设定坐标（只能设定一次）",
   "message.smalltools.target_not_supported": "这块石头不能设定坐标。",
-  "message.smalltools.target_locked": "这块石头已经绑定过坐标，不能再改。"
+  "message.smalltools.target_locked": "这块石头已经绑定过坐标，不能再改。",
+  "itemGroup.smalltools": "StillMi 的小工具"
 }

@@ -39,5 +39,6 @@
   "tooltip.smalltools.portal_stone.no_target": "Target: not set (uses the config default)",
   "tooltip.smalltools.portal_stone.set_hint": "Sneak + right-click to set the target (once only)",
   "message.smalltools.target_not_supported": "This stone cannot be given a target.",
-  "message.smalltools.target_locked": "This stone already has a target and cannot be changed."
+  "message.smalltools.target_locked": "This stone already has a target and cannot be changed.",
+  "itemGroup.smalltools": "StillMi's Small Tools"
 }

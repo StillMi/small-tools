@@ -11,7 +11,8 @@ import com.mojang.serialization.Codec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.world.item.CreativeModeTabs;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Rarity;
@@ -24,7 +25,7 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
+import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredHolder;
@@ -32,12 +33,12 @@ import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 /**
- * 末影传送石 (Ender Portal Stone)
+ * StillMi 的小工具（整合模组）。
  *
- * <p>长按右键引导 4 秒，在玩家面前开启一座「台阶 + 高台 + 传送门」结构，同时在距离玩家
- * 256~2048 格的另一个生物群系中开启它的“另一端”。两座门互相连接，可以往返穿行。</p>
+ * <p>当前收录：末影传送石、地牢传送石，以及它们共用的传送门方块。
+ * 两块石头都在自己的创造模式标签页 {@link #TAB} 里，不跟原版工具类混在一起。</p>
  *
- * <p>传送门失效（次数用尽 / 任意组成方块被破坏）时，两端整座门连高台和台阶
+ * <p>传送门失效（次数用尽 / 任意组成方块被破坏）时，两端整座门
  * 一起被完全清除，不留遗迹。每次新开一对门，该玩家上一对还没失效的门会自动消散。
  * 传送石本身最多只能开门 {@link PortalStoneItem#MAX_USES} 次，用完后物品消失。</p>
  */
@@ -51,6 +52,7 @@ public class SmallTools {
             DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MODID);
     public static final DeferredRegister.DataComponents DATA_COMPONENTS =
             DeferredRegister.createDataComponents(Registries.DATA_COMPONENT_TYPE, MODID);
+
 
     /**
      * 这块传送石绑定的目标坐标。
@@ -107,13 +109,32 @@ public class SmallTools {
                             .of(RemotePortalBlockEntity::new, REMOTE_PORTAL.get())
                             .build(null));
 
+    /**
+     * 本模组自己的创造模式标签页，图标用末影传送石。
+     *
+     * <p>必须声明在两个物品之后：{@code icon} 和 {@code displayItems} 都会引用它们，
+     * 写在前面会触发「非法前向引用」。</p>
+     */
+    public static final DeferredRegister<CreativeModeTab> CREATIVE_TABS =
+            DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MODID);
+
+    public static final DeferredHolder<CreativeModeTab, CreativeModeTab> TAB =
+            CREATIVE_TABS.register("main", () -> CreativeModeTab.builder()
+                    .title(Component.translatable("itemGroup.smalltools"))
+                    .icon(() -> new ItemStack(PORTAL_STONE.get()))
+                    .displayItems((parameters, output) -> {
+                        output.accept(PORTAL_STONE.get());
+                        output.accept(DUNGEON_PORTAL_STONE.get());
+                    })
+                    .build());
+
     public SmallTools(IEventBus modEventBus, ModContainer modContainer) {
         ITEMS.register(modEventBus);
         BLOCKS.register(modEventBus);
         BLOCK_ENTITIES.register(modEventBus);
         DATA_COMPONENTS.register(modEventBus);
+        CREATIVE_TABS.register(modEventBus);
 
-        modEventBus.addListener(this::addCreative);
         modEventBus.addListener(this::registerPayloads);
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
 
@@ -126,12 +147,5 @@ public class SmallTools {
     private void registerPayloads(RegisterPayloadHandlersEvent event) {
         event.registrar("1").playToServer(
                 SetTargetPayload.TYPE, SetTargetPayload.STREAM_CODEC, SetTargetPayload::handle);
-    }
-
-    private void addCreative(BuildCreativeModeTabContentsEvent event) {
-        if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
-            event.accept(new ItemStack(PORTAL_STONE.get()));
-            event.accept(new ItemStack(DUNGEON_PORTAL_STONE.get()));
-        }
     }
 }

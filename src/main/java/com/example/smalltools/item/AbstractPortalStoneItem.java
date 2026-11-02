@@ -217,7 +217,7 @@ public abstract class AbstractPortalStoneItem extends Item {
 
         tooltip.add(Component.translatable("tooltip.smalltools.portal_stone.channel", Config.CHANNEL_SECONDS.get())
                 .withStyle(ChatFormatting.DARK_AQUA));
-        tooltip.add(Component.translatable(loreKey())
-                .withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC));
+        // 来源注释单独隔开（空两行 + 暗紫斜体）
+        LoreTooltip.append(tooltip, loreKey());
     }
 }

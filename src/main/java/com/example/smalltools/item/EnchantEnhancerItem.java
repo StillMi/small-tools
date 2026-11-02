@@ -47,7 +47,6 @@ public class EnchantEnhancerItem extends Item {
                 .withStyle(ChatFormatting.GRAY));
         tooltip.add(Component.translatable("tooltip.smalltools.enhancer.hint")
                 .withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC));
-        tooltip.add(Component.translatable("tooltip.smalltools.enhancer.lore")
-                .withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC));
+        LoreTooltip.append(tooltip, "tooltip.smalltools.enhancer.lore");
     }
 }

@@ -54,9 +54,7 @@ public class WashStoneItem extends Item {
                 .withStyle(ChatFormatting.GRAY));
         tooltip.add(Component.translatable("tooltip.smalltools.wash_stone.hint")
                 .withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC));
-        // 来源注释放最后。样式和另外两颗石头保持一致（暗灰斜体）：
-        // AbstractPortalStoneItem 里 loreKey() 用的就是 DARK_GRAY + ITALIC
-        tooltip.add(Component.translatable("tooltip.smalltools.wash_stone.lore")
-                .withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC));
+        // 来源注释：空两行 + 暗紫斜体，与上面的功能说明明确分开
+        LoreTooltip.append(tooltip, "tooltip.smalltools.wash_stone.lore");
     }
 }

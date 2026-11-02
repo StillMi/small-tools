@@ -28,7 +28,6 @@ public class LiquidLapisItem extends Item {
                                 List<Component> tooltip, TooltipFlag flag) {
         tooltip.add(Component.translatable("tooltip.smalltools.liquid_lapis")
                 .withStyle(ChatFormatting.GRAY));
-        tooltip.add(Component.translatable("tooltip.smalltools.liquid_lapis.lore")
-                .withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC));
+        LoreTooltip.append(tooltip, "tooltip.smalltools.liquid_lapis.lore");
     }
 }

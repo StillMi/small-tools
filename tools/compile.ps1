@@ -32,17 +32,35 @@ $cp = @()
 foreach ($dep in $deps) {
     if (Test-Path (Join-Path $root $dep)) {
         $cp += $dep
+        Write-Host "依赖（本工程）：$((Join-Path $root $dep))"
     } elseif (Test-Path (Join-Path $sibling $dep)) {
         $cp += "../enderportal/$dep"
+        # 回落只保证"文件存在"，所以把真正命中的绝对路径打出来，方便核对是不是同一个版本
+        Write-Host "依赖（回落 enderportal）：$((Join-Path $sibling $dep))"
     } else {
         throw "找不到依赖：$dep（本地和 $sibling 都没有）"
     }
 }
 $cache = Join-Path $env:USERPROFILE '.gradle\caches\modules-2\files-2.1'
 if (Test-Path $cache) {
-    $cp += Get-ChildItem $cache -Recurse -Filter *.jar |
-           Where-Object { $_.Name -notmatch '-(sources|javadoc)\.jar$' } |
-           ForEach-Object { $_.FullName.Replace('\', '/') }
+    # 缓存里同一个库常有多份（universal / userdev / 普通 jar），Get-ChildItem 的返回顺序不保证稳定，
+    # 所以按完整路径排序，保证每次编译拿到的 classpath 完全一致
+    $cached = @(Get-ChildItem $cache -Recurse -Filter *.jar |
+                Where-Object { $_.Name -notmatch '-(sources|javadoc)\.jar$' } |
+                Sort-Object FullName |
+                ForEach-Object { $_.FullName.Replace('\', '/') })
+    Write-Host "Gradle 缓存：$($cached.Count) 个 jar（已按路径排序）"
+    if ($cached.Count -gt 0) { $cp += $cached }
+}
+
+# 这次真正用到的依赖一行一个落盘，编译出怪问题时直接对照，不用猜顺序
+$cpDump = Join-Path $root 'build\javac-classpath.txt'
+try {
+    New-Item -ItemType Directory -Path (Join-Path $root 'build') -Force | Out-Null
+    Set-Content -Path $cpDump -Value $cp -Encoding UTF8
+    Write-Host "classpath 清单：$cpDump（共 $($cp.Count) 条）"
+} catch {
+    Write-Host "classpath 清单写入失败：$($_.Exception.Message)"
 }
 
 $sources = Get-ChildItem (Join-Path $root 'src\main\java') -Recurse -Filter *.java |

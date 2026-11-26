@@ -122,7 +122,14 @@ public class RemotePortalBlock extends Block implements EntityBlock, Portal {
         }
 
         if (!(level instanceof ServerLevel serverLevel)) {
-            // 客户端：只为特效登记（CONFUSION + PORTAL_TRIGGER），不做任何服务端校验
+            // 客户端：只为特效登记（CONFUSION + PORTAL_TRIGGER），不做任何服务端校验。
+            //
+            // 注意：客户端拿不到配额，也拿不到冷却。Entity#portalCooldown 没有
+            // DataWatcher，setPortalCooldown 只在服务端 executeTeleport 成功后调用，
+            // 所以上面那道 isOnPortalCooldown() 守卫在客户端永远为 false。结果是
+            // "次数已经用完"的玩家站在门里时，本地照样会建 portalProcess、播满整段
+            // 镜头扭曲和 PORTAL_TRIGGER，然后服务端 canAccept 拒绝、什么都不发生。
+            // 这是已知的视觉/行为不一致，要修得加一条 S2C 同步，不要在这里做本地猜测。
             entity.setAsInsidePortal(this, pos);
             return;
         }

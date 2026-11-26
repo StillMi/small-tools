@@ -15,6 +15,9 @@ public final class Config {
     public static final ModConfigSpec.IntValue AIM_DISTANCE;
     public static final ModConfigSpec.IntValue DUNGEON_RADIUS_CHUNKS;
 
+    public static final ModConfigSpec.IntValue COMPANION_DELAY_SECONDS;
+    public static final ModConfigSpec.IntValue COMPANION_REQUEST_SECONDS;
+
     public static final ModConfigSpec.IntValue TARGET_X;
     public static final ModConfigSpec.IntValue TARGET_Y;
     public static final ModConfigSpec.IntValue TARGET_Z;
@@ -37,7 +40,8 @@ public final class Config {
 
         TELEPORT_DELAY_SECONDS = builder
                 .comment("同一个人/实体传送完之后，要隔多少秒才能再次被传送门传送。",
-                        "用来避免站在门口被来回反复传送。0 表示用原版的 5 秒。")
+                        "用来避免站在门口被来回反复传送。",
+                        "0 表示退回原版的下界门冷却 10 tick（0.5 秒）；默认的 5 秒是原版的 10 倍。")
                 .defineInRange("teleportDelaySeconds", 5, 0, 60);
 
         ROUND_TRIPS = builder
@@ -53,6 +57,15 @@ public final class Config {
                 .comment("地牢传送石在玩家周围多少个区块内找地牢（1 区块 = 16 格）。",
                         "只有已经加载的区块才能被扫到，所以实际范围还受视野/模拟距离限制。")
                 .defineInRange("dungeonRadiusChunks", 20, 1, 48);
+
+        COMPANION_DELAY_SECONDS = builder
+                .comment("同伴传送石：对方同意之后，还要等多少秒才真正传送过去。",
+                        "等待期间两边都会看到倒计时，任何一方离线或丢掉石头都会取消。")
+                .defineInRange("companionDelaySeconds", 10, 0, 60);
+
+        COMPANION_REQUEST_SECONDS = builder
+                .comment("同伴传送石：请求最多等对方回应多少秒，超时自动作废。")
+                .defineInRange("companionRequestSeconds", 30, 5, 120);
 
         builder.pop();
 

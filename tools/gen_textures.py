@@ -396,6 +396,88 @@ def make_liquid_lapis() -> Image.Image:
     return img
 
 
+def make_companion_item() -> Image.Image:
+    """同伴传送石：同一块石头，中间不是一颗宝石，而是并肩的两颗。
+
+    左边紫、右边青，中间留一道极细的暗缝，读起来就是"两个人"；
+    两颗都带光晕，所以远看仍然是一团发亮的核心，不会拆成两个物件。
+    """
+    img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
+    px = img.load()
+
+    # 石头轮廓：和末影传送石同一套椭圆，保证两颗石头的体量一致
+    mask = [[False] * SIZE for _ in range(SIZE)]
+    for y in range(SIZE):
+        for x in range(SIZE):
+            dx = (x - 7.5) / 6.3
+            dy = (y - 8.2) / 5.4
+            if dx * dx + dy * dy <= 1.0:
+                mask[y][x] = True
+    for (x, y) in ((2, 5), (3, 4), (12, 12), (11, 13), (1, 10), (14, 6)):
+        mask[y][x] = False
+
+    def inside(x: int, y: int) -> bool:
+        return 0 <= x < SIZE and 0 <= y < SIZE and mask[y][x]
+
+    palette = {
+        1: (44, 39, 58, 255),
+        2: (60, 54, 78, 255),
+        3: (80, 72, 104, 255),
+        4: (105, 95, 133, 255),
+    }
+
+    random.seed(11)
+    for y in range(SIZE):
+        for x in range(SIZE):
+            if not mask[y][x]:
+                continue
+            edge = any(not inside(x + dx, y + dy) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+            if edge:
+                px[x, y] = (24, 20, 33, 255)
+                continue
+            t = (y - 3) / 11.0
+            idx = 4 - int(t * 2.6) + random.choice([0, 0, 0, 1, -1])
+            idx = max(1, min(4, idx))
+            px[x, y] = palette[idx]
+
+    # 两颗并排的小宝石：左紫右青。
+    # 半径压到 1.55、中心只隔 3.4，让两颗的边缘几乎贴在一起 ——
+    # 离得远了会读成"石头上有两个灯"，贴在一起才像同一团核心里的两个人。
+    gems = (
+        (6.3, (196, 138, 255), (128, 58, 202)),
+        (9.7, (148, 214, 255), (52, 150, 196)),
+    )
+    for cx, bright, dark in gems:
+        cy = 8.0
+        for y in range(SIZE):
+            for x in range(SIZE):
+                d = math.hypot(x + 0.5 - cx, y + 0.5 - cy)
+                if d <= 1.55:
+                    if d <= 0.7:
+                        color = (246, 242, 255)
+                    elif d <= 1.15:
+                        color = bright
+                    else:
+                        color = dark
+                    px[x, y] = (color[0], color[1], color[2], 255)
+                elif d <= 2.8 and mask[y][x]:
+                    r, g, b, a = px[x, y]
+                    px[x, y] = (min(255, r + 16), max(0, g - 2), min(255, b + 20), a)
+
+    # 中间那道缝：只切在两颗真正相接的地方，颜色用比石头更深的暗紫，
+    # 用纯黑会读成"裂了"，用暗紫才读成"分开但不碎"
+    for y in range(6, 11):
+        if px[8, y][3] == 255:
+            r, g, b, _ = px[8, y]
+            if r > 120 or g > 120 or b > 150:
+                px[8, y] = (46, 34, 62, 255)
+
+    # 各自一点高光
+    px[5, 6] = (255, 252, 255, 255)
+    px[10, 10] = (168, 118, 226, 255)
+    return img
+
+
 def main() -> None:
     item_dir = os.path.join(ROOT, "item")
     os.makedirs(item_dir, exist_ok=True)
@@ -406,6 +488,7 @@ def main() -> None:
         os.path.join(item_dir, "wash_stone.png"): make_wash_item(),
         os.path.join(item_dir, "enchant_enhancer.png"): make_enhancer_item(),
         os.path.join(item_dir, "liquid_lapis.png"): make_liquid_lapis(),
+        os.path.join(item_dir, "companion_stone.png"): make_companion_item(),
     }
 
     for path, image in targets.items():

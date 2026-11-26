@@ -19,7 +19,7 @@ import java.util.List;
 /**
  * 附魔强化器。
  *
- * <p>右键打开界面，消耗凝造青金强化物品上的附魔。规则见 {@link EnhancerMenu}，
+ * <p>右键打开界面，消耗浓缩液态青金强化物品上的附魔。规则见 {@link EnhancerMenu}，
  * 这里只负责开界面和写说明。</p>
  */
 public class EnchantEnhancerItem extends Item {

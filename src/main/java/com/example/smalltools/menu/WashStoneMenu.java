@@ -35,9 +35,10 @@ import java.util.Random;
  * <ol>
  *   <li>把一件<b>已附魔</b>的工具/武器放进槽里；未附魔的放不进去。</li>
  *   <li>界面列出这件物品的每个附魔词条。</li>
- *   <li><b>点下一个词条之后就不可撤销</b>：洗炼石当场消耗、输入槽锁死、
- *       服务端立刻随机三条候选。此后关界面也不退还石头。</li>
- *   <li>选一条候选，替换掉原来那条附魔。</li>
+ *   <li><b>点下一个词条之后输入槽就锁死</b>：物品拿不出也换不了，服务端立刻随机
+ *       三条候选；这一发是否吃到满运气，也在这一刻定下来。</li>
+ *   <li>选一条候选，替换掉原来那条附魔 —— <b>替换真正写成的那一刻</b>才扣洗炼石、
+ *       才结算运气。中途关界面，物品原样返还，石头和运气都不动。</li>
  * </ol>
  *
  * <h2>等级规则（±1）</h2>
@@ -79,6 +80,8 @@ public class WashStoneMenu extends AbstractContainerMenu {
     }
 
     private final InteractionHand hand;
+    /** 打开界面时那颗洗炼石所在的背包槽位；扣费只认这一格。 */
+    private final int stoneSlot;
     private final SimpleContainer container = new SimpleContainer(1) {
         @Override
         public void setChanged() {
@@ -92,6 +95,17 @@ public class WashStoneMenu extends AbstractContainerMenu {
     private int selected = -1;
     private boolean locked;
 
+    /**
+     * 这一发候选是不是吃到了满运气。
+     *
+     * <p>选词条时就把答案定下来（否则玩家可以在选候选之前再刷一次运气），
+     * 但<b>不消费</b>：只有替换真正写成之后，{@link WashLuck#advance} 才会被调用。</p>
+     */
+    private boolean pendingFullLuck;
+
+    /** 副手在玩家背包里的槽位编号（原版 {@code Inventory.SLOT_OFFHAND}）。 */
+    private static final int OFFHAND_SLOT = 40;
+
     /** 服务端算出的运气百分比（0~100），只用于显示。 */
     private int luckPercent;
 
@@ -104,6 +118,9 @@ public class WashStoneMenu extends AbstractContainerMenu {
         this.hand = hand;
         this.menuPlayer = inventory.player;
         this.owner = inventory.player instanceof ServerPlayer sp ? sp : null;
+        // 记住打开界面时那颗石头在哪一格：界面开着的时候玩家可以把它换走或丢掉，
+        // 扣费必须指向"当时那一颗"，而不是点击瞬间手上随便什么东西。
+        this.stoneSlot = hand == InteractionHand.OFF_HAND ? OFFHAND_SLOT : inventory.selected;
 
         // 输入槽：坐标直接按面板内的位置算好
         this.addSlot(new Slot(container, SLOT_INPUT, SLOT_U + 1, SLOT_V + 1) {
@@ -162,13 +179,19 @@ public class WashStoneMenu extends AbstractContainerMenu {
     }
 
     private void onInputChanged() {
-        entries.clear();
-        candidates.clear();
-        selected = -1;
+        // 锁定期间任何"输入变了"的通知都不能清列表：
+        // 这时的 entries / candidates / selected 是玩家正在选的那一组，
+        // 清掉就再也拼不回来（槽位还锁着，物品拿不出来）。
+        // 会走到这里的典型情况：窗口 resize / F11 / 改 GUI 缩放让界面重新 init()。
         if (locked) {
             sync();
             return;
         }
+
+        entries.clear();
+        candidates.clear();
+        selected = -1;
+        pendingFullLuck = false;
 
         ItemStack input = container.getItem(SLOT_INPUT);
         if (isWashable(input)) {
@@ -230,12 +253,28 @@ public class WashStoneMenu extends AbstractContainerMenu {
         return hand;
     }
 
-    public void refresh(ServerLevel level) {
-        onInputChanged();
+    /**
+     * 客户端请求一次状态重发（界面 {@code init()} 每次都发，resize / F11 也会触发）。
+     *
+     * <p><b>只发包、不重算</b>：重算会把锁定中的候选洗掉，玩家就卡在"拿不出、洗不了"的死局里。
+     * 真正的重算只挂在输入槽真的变化时（{@link #onInputChanged()}）。</p>
+     */
+    public void resend() {
+        refreshLuck();
+        sync();
+    }
+
+    /** 打开界面时记下的那颗洗炼石（主手 = 当前选中格，副手 = 槽位 40）。 */
+    private ItemStack stoneStack(Player player) {
+        return player.getInventory().getItem(stoneSlot);
     }
 
     /**
-     * 玩家选了第 {@code index} 个词条：立刻扣石头、锁定、生成候选。
+     * 玩家选了第 {@code index} 个词条：锁定输入槽、生成三条候选。
+     *
+     * <p><b>这里不扣石头、也不推进运气</b>：这一发是否吃到满运气先记进
+     * {@link #pendingFullLuck}，等玩家真的选了一条候选、替换写成之后，
+     * 才在 {@link #applyCandidate} 里一起结算。中途关界面不损失任何东西。</p>
      *
      * @return 是否成功
      */
@@ -250,8 +289,10 @@ public class WashStoneMenu extends AbstractContainerMenu {
         if (!isWashable(input)) {
             return false;
         }
-        ItemStack stone = menuPlayer.getItemInHand(hand);
-        if (!(stone.getItem() instanceof WashStoneItem)) {
+        if (!(stoneStack(menuPlayer).getItem() instanceof WashStoneItem)) {
+            // 界面开着的时候玩家把手里的石头换走 / 丢掉了：说一声，别静默失败
+            menuPlayer.displayClientMessage(
+                    Component.translatable("message.smalltools.wash.no_stone"), true);
             return false;
         }
 
@@ -267,18 +308,15 @@ public class WashStoneMenu extends AbstractContainerMenu {
         candidates.clear();
         candidates.addAll(rollCandidates(level, input, baseLevel, useFull));
         if (candidates.isEmpty()) {
-            return false;   // 没有可换的：不锁定、不扣石头
+            // 池子里一条能换的都没有：不锁定、不扣任何东西，但不能让玩家以为点坏了
+            menuPlayer.displayClientMessage(
+                    Component.translatable("message.smalltools.wash.no_candidate"), true);
+            sync();
+            return false;
         }
 
-        // 先推进运气，再扣石头。
-        // 顺序反过来的话，万一 advance 抛异常，石头已经没了但运气没记上。
-        if (luckData != null && owner != null) {
-            luckData.advance(owner, useFull, random);
-            refreshLuck();
-        }
-
-        // 锁定 + 扣石头
-        stone.shrink(1);
+        // 只记住，不消费；锁定 + 生成候选
+        this.pendingFullLuck = useFull;
         this.locked = true;
         this.selected = index;
 
@@ -314,6 +352,12 @@ public class WashStoneMenu extends AbstractContainerMenu {
             if (holder.is(EnchantmentTags.CURSE)) {
                 continue;
             }
+            // 互斥组：1.21 把"锋利 / 亡灵杀手 / 节肢杀手"这类关系写进了附魔数据的
+            // exclusive_set。#supportsEnchantment 只查 supported_items，不含互斥，
+            // 这里必须再查一遍，否则会洗出原版自己都不允许并存的组合。
+            if (exclusiveWithExisting(holder, existing)) {
+                continue;
+            }
             pool.add(holder);
         }
 
@@ -327,6 +371,23 @@ public class WashStoneMenu extends AbstractContainerMenu {
             picked.add(new Candidate(pool.get(i), pickLevel(pool.get(i), baseLevel, maxRoll)));
         }
         return picked;
+    }
+
+    /**
+     * 候选与物品上现有的任一条附魔是否互斥。
+     *
+     * <p>双向都要查：候选的 {@code exclusive_set} 可能含已有附魔，
+     * 已有附魔的 {@code exclusive_set} 也可能含候选 —— 数据包可以只写一边。</p>
+     */
+    private static boolean exclusiveWithExisting(Holder<Enchantment> holder,
+                                                ItemEnchantments existing) {
+        for (Holder<Enchantment> present : existing.keySet()) {
+            if (holder.value().exclusiveSet().contains(present)
+                    || present.value().exclusiveSet().contains(holder)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -345,7 +406,12 @@ public class WashStoneMenu extends AbstractContainerMenu {
         return Math.max(1, Math.min(target, max));
     }
 
-    /** 选了候选：替换附魔。洗炼石已在 chooseEntry 扣过。 */
+    /**
+     * 选了候选：替换附魔，并在这里<b>才</b>扣洗炼石、结算运气。
+     *
+     * <p>结算顺序：先写附魔，再记运气，最后扣石头。这样任何一步失败之前，
+     * 物品状态都已经落定；反过来（先扣石头）一旦后面出错，玩家就白丢一颗。</p>
+     */
     public boolean applyCandidate(ServerPlayer player, int index) {
         if (!locked || selected < 0 || selected >= entries.size()) {
             return false;
@@ -357,6 +423,13 @@ public class WashStoneMenu extends AbstractContainerMenu {
         if (input.isEmpty()) {
             return false;
         }
+        ItemStack stone = stoneStack(player);
+        if (!(stone.getItem() instanceof WashStoneItem)) {
+            // 锁定期间石头被换走了：不替换、不扣费，保持锁定，补一颗还能继续选
+            player.displayClientMessage(
+                    Component.translatable("message.smalltools.wash.no_stone"), true);
+            return false;
+        }
 
         Holder<Enchantment> old = entries.get(selected);
         Candidate picked = candidates.get(index);
@@ -366,10 +439,16 @@ public class WashStoneMenu extends AbstractContainerMenu {
         mutable.set(picked.enchantment(), picked.level());
         input.set(DataComponents.ENCHANTMENTS, mutable.toImmutable());
 
-        candidates.clear();
-        entries.clear();
-        selected = -1;
-        locked = false;
+        // 替换已经写成，这里才真正结算：先记运气，再扣石头
+        WashLuck luckData = owner != null ? WashLuck.get(owner.server) : null;
+        if (luckData != null && owner != null) {
+            luckData.advance(owner, pendingFullLuck, random);
+        }
+        stone.shrink(1);
+        this.pendingFullLuck = false;
+
+        this.selected = -1;
+        this.locked = false;
 
         if (player.level() instanceof ServerLevel serverLevel) {
             serverLevel.playSound(null, player.blockPosition(), SoundEvents.ENCHANTMENT_TABLE_USE,
@@ -379,8 +458,10 @@ public class WashStoneMenu extends AbstractContainerMenu {
                             .withStyle(net.minecraft.ChatFormatting.LIGHT_PURPLE), true);
         }
 
-        broadcastChanges();
-        sync();
+        // 物品还在槽里、附魔已经变了：重建词条列表（此时 locked 已是 false）。
+        // 不能只 broadcastChanges() —— 直接改组件不会触发 setChanged，
+        // 不重建的话界面就退回"请放入物品"，得把物品拿出来再放回去才能继续。
+        onInputChanged();
         return true;
     }
 

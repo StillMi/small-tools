@@ -15,7 +15,12 @@ import net.minecraft.world.item.ItemStack;
  *
  * <p>数据全部来自原版已经同步好的状态：{@link LocalPlayer#isUsingItem()}、
  * {@link LocalPlayer#getUseItem()}、{@link LocalPlayer#getTicksUsingItem()}，
- * 所以不需要自己发包，也不会出现客户端/服务端不同步。</p>
+ * 所以不需要自己发包。</p>
+ *
+ * <p>唯一的例外是 {@code getUseDuration} 读的是 COMMON 配置：单人/局域网下两端
+ * 读同一份 toml 没问题，专用服务器上客户端用的是自己那份，条的长度可能与服务端
+ * 实际的引导时间不一致。这不影响功能 —— 服务端的 {@code updateUsingItem} 自己计时，
+ * 到点就 finishUsingItem —— 只是进度条的视觉长度可能偏长或偏短。</p>
  *
  * <p>显示在准星下方、快捷栏上方的居中位置。样式是<b>细条 + 剩余秒数</b>：
  * 进度条从右往左退（剩余时间变短），上方文字显示还剩几秒，精确到 0.1 秒。</p>

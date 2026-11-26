@@ -53,13 +53,26 @@ public final class WashLuck extends SavedData {
     public WashLuck() {
     }
 
+    /** 写路径：没有就建一条，只有真要改数值时才用。 */
     private State state(ServerPlayer player) {
         return states.computeIfAbsent(player.getUUID(), id -> new State());
     }
 
+    /**
+     * 读路径：没有就当作零状态，<b>不建条目</b>。
+     *
+     * <p>以前 {@link #get} / {@link #isArmed} 也走 {@code computeIfAbsent}，
+     * 于是"打开一次界面看一眼运气"就会在存档里留下一条永久 UUID，
+     * 玩家越积越多、文件只涨不缩。读接口必须是无副作用的。</p>
+     */
+    private State peek(ServerPlayer player) {
+        return states.get(player.getUUID());
+    }
+
     /** 当前进度（0~10000），用于显示。 */
     public int get(ServerPlayer player) {
-        return state(player).progress;
+        State s = peek(player);
+        return s == null ? 0 : s.progress;
     }
 
     /**
@@ -69,7 +82,8 @@ public final class WashLuck extends SavedData {
      * 但还没真正攒满，也不会误判。</p>
      */
     public boolean isArmed(ServerPlayer player) {
-        return state(player).armed;
+        State s = peek(player);
+        return s != null && s.armed;
     }
 
     /**
@@ -126,12 +140,10 @@ public final class WashLuck extends SavedData {
                 UUID id = UUID.fromString(key);
                 CompoundTag one = map.getCompound(key);
                 State s = new State();
-                s.progress = one.getInt("Progress");
-                s.armed = one.getBoolean("Armed");
-                // 兼容旧存档：只有进度、没有 Armed 字段时按进度补判
-                if (!one.contains("Armed") && s.progress >= FULL) {
-                    s.armed = true;
-                }
+                // 夹取 + 自洽：Progress 被手改 / 写坏（比如写成 25000）时，
+                // 不能出现"界面显示已满、armed 却是 false"的错位，所以这里一起兜住。
+                s.progress = Math.max(0, Math.min(FULL, one.getInt("Progress")));
+                s.armed = one.getBoolean("Armed") || s.progress >= FULL;
                 data.states.put(id, s);
             } catch (IllegalArgumentException ignored) {
                 // 坏 UUID 跳过，不影响其他人

@@ -37,8 +37,6 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
-import net.neoforged.neoforge.common.extensions.IMenuTypeExtension;
-import net.neoforged.neoforge.registries.DeferredRegister;
 
 /**
  * StillMi 的小工具（整合模组）。
@@ -143,6 +141,17 @@ public class SmallTools {
             LiquidLapisItem::new,
             new Item.Properties());
 
+    /**
+     * 同伴传送石：右键选一位在线玩家，对方同意后倒计时 10 秒传送到他身边。
+     *
+     * <p>它不走耐久那套 —— 用一次就整颗消失，所以给的是普通堆叠。</p>
+     */
+    public static final DeferredItem<com.example.smalltools.item.CompanionPortalStoneItem> COMPANION_STONE =
+            ITEMS.registerItem(
+                    "companion_stone",
+                    com.example.smalltools.item.CompanionPortalStoneItem::new,
+                    new Item.Properties().rarity(Rarity.RARE));
+
     /** 强化界面。 */
     public static final DeferredHolder<MenuType<?>, MenuType<EnhancerMenu>> ENHANCER_MENU =
             MENUS.register("enchant_enhancer", () -> IMenuTypeExtension.create(
@@ -196,6 +205,7 @@ public class SmallTools {
                         output.accept(WASH_STONE.get());
                         output.accept(ENHANCER.get());
                         output.accept(LIQUID_LAPIS.get());
+                        output.accept(COMPANION_STONE.get());
                     })
                     .build());
 
@@ -213,6 +223,17 @@ public class SmallTools {
         // 传送不能在 entityInside 里就地执行（会被 handleMovePlayer 的位置纠偏拉回去），
         // 统一排到 tick 末尾，见 PortalTeleports
         NeoForge.EVENT_BUS.addListener(PortalTeleports::onServerTickPost);
+        // 同伴传送石的请求超时 / 倒计时 / 传送也都在 tick 末尾，
+        // 同样是为了脱离 handleMovePlayer 的调用栈
+        NeoForge.EVENT_BUS.addListener(
+                com.example.smalltools.portal.CompanionTeleports::onServerTickPost);
+        NeoForge.EVENT_BUS.addListener(
+                com.example.smalltools.portal.CompanionTeleports::onServerStopped);
+        // 排队表是静态的，会强引用 ServerLevel / Entity；换世界时必须清掉，
+        // 否则旧世界的方块实体一直被吊着，而且新世界启动时可能被旧队列干扰
+        NeoForge.EVENT_BUS.addListener(
+                (net.neoforged.neoforge.event.server.ServerStoppedEvent event) ->
+                        PortalTeleports.clear());
         // 强化次数写在任意物品上，不可能给每个物品都加 tooltip 钩子，
         // 所以统一走这个事件
         NeoForge.EVENT_BUS.addListener(SmallTools::onItemTooltip);
@@ -244,5 +265,24 @@ public class SmallTools {
                 com.example.smalltools.net.EnhancerSyncPayload.TYPE,
                 com.example.smalltools.net.EnhancerSyncPayload.STREAM_CODEC,
                 com.example.smalltools.net.EnhancerSyncPayload::handle);
+
+        // 同伴传送石：客户端要名单 → 服务端推名单；客户端选人 → 服务端发请求；
+        // 服务端问对方 → 对方回答
+        registrar.playToServer(
+                com.example.smalltools.net.CompanionRequestPayload.TYPE,
+                com.example.smalltools.net.CompanionRequestPayload.STREAM_CODEC,
+                com.example.smalltools.net.CompanionRequestPayload::handle);
+        registrar.playToClient(
+                com.example.smalltools.net.CompanionRosterPayload.TYPE,
+                com.example.smalltools.net.CompanionRosterPayload.STREAM_CODEC,
+                com.example.smalltools.net.CompanionRosterPayload::handle);
+        registrar.playToClient(
+                com.example.smalltools.net.CompanionPromptPayload.TYPE,
+                com.example.smalltools.net.CompanionPromptPayload.STREAM_CODEC,
+                com.example.smalltools.net.CompanionPromptPayload::handle);
+        registrar.playToServer(
+                com.example.smalltools.net.CompanionReplyPayload.TYPE,
+                com.example.smalltools.net.CompanionReplyPayload.STREAM_CODEC,
+                com.example.smalltools.net.CompanionReplyPayload::handle);
     }
 }

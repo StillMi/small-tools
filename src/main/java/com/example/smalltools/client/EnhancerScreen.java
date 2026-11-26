@@ -17,8 +17,12 @@ import java.util.List;
 /**
  * 附魔强化界面。
  *
- * <p>布局沿用洗炼界面的魔法紫风格，但配色偏"青金"（深蓝 + 金），
- * 和凝造青金呼应，避免两个界面看起来一模一样。</p>
+ * <p>布局沿用洗炼界面的魔法紫风格，但配色偏“青金”（深蓝 + 金），
+ * 和浓缩液态青金呼应，避免两个界面看起来一模一样。</p>
+ *
+ * <p>按钮亮不亮<b>只读服务端算出来的结果</b>（{@code EnhancerSyncPayload} 里的
+ * canInvest / canEnhance 两位），客户端不再自己抄一份判定 —— 否则两端一有出入
+ * 就会出现“按钮亮着、点了没反应”或者反过来。</p>
  */
 public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
 
@@ -31,6 +35,8 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
 
     private static final int LIST_V = 106;
     private static final int ROW_STEP = 12;
+    /** 列表最多画几行：再往下就压到 148 的进度文字和 158 的五段条上了。 */
+    private static final int MAX_LIST_ROWS = 3;
 
     private static final int PANEL_TOP = 0xD8081428;
     private static final int PANEL_BOTTOM = 0xE0040814;
@@ -49,6 +55,8 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
     private int used;
     private int fill;
     private int xpNeed;
+    private boolean canInvest;
+    private boolean canEnhance;
     private Component result = Component.empty();
 
     private Button enhanceButton;
@@ -87,10 +95,19 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
                 this.menu.containerId, EnhanceActionPayload.KIND_REFRESH));
     }
 
-    /** 投入按钮上的文字：显示本次需要多少颗（括号里是换算出的经验）。 */
+    /**
+     * 投入按钮上的文字：显示本次需要多少颗（括号里是换算出的经验）。
+     *
+     * <p>槽里没东西、或者已经没有可强化的目标时，不要再把 0 顶成 1 写成
+     * “投入 1 颗（1 经验）”，直接写“无可强化”。</p>
+     */
     private Component investLabel() {
+        boolean empty = this.menu.getSlot(EnhancerMenu.SLOT_ITEM).getItem().isEmpty();
+        if (empty || this.cost <= 0 || this.xpNeed <= 0) {
+            return Component.translatable("screen.smalltools.enhancer.no_target");
+        }
         return Component.translatable("screen.smalltools.enhancer.invest",
-                Math.max(1, this.cost), Math.max(1, this.xpNeed));
+                this.cost, this.xpNeed);
     }
 
     public void accept(EnhancerSyncPayload payload) {
@@ -103,6 +120,8 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
         this.used = payload.used();
         this.fill = payload.fill();
         this.xpNeed = payload.xpNeed();
+        this.canInvest = payload.canInvest();
+        this.canEnhance = payload.canEnhance();
         this.result = payload.result();
         if (this.investButton != null) {
             this.investButton.setMessage(investLabel());
@@ -177,14 +196,19 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
         int centerX = this.leftPos + PANEL_W / 2;
         boolean exhausted = this.used >= EnhancerMenu.MAX_ENHANCES;
 
-        // ---- 附魔列表 ----
+        // ---- 附魔列表（最多 3 行，多出来的折成一行提示，别压到进度条上）----
         int y = this.topPos + LIST_V;
         if (this.enchantments.isEmpty()) {
             graphics.drawCenteredString(this.font,
                     Component.translatable("screen.smalltools.enhancer.insert"),
                     centerX, this.topPos + 92, MUTED);
         } else {
-            for (EnhancerSyncPayload.Entry e : this.enchantments) {
+            int total = this.enchantments.size();
+            boolean more = total > MAX_LIST_ROWS;
+            // 有省略时最后一行让给“…还有 N 条”，所以少画一行
+            int shown = more ? MAX_LIST_ROWS - 1 : total;
+            for (int i = 0; i < shown; i++) {
+                EnhancerSyncPayload.Entry e = this.enchantments.get(i);
                 int color = e.maxed() ? GOLD : TITLE;
                 graphics.drawString(this.font, e.name(), this.leftPos + 26, y, color, false);
                 if (e.maxed()) {
@@ -192,6 +216,11 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
                             GOLD, false);
                 }
                 y += ROW_STEP;
+            }
+            if (more) {
+                graphics.drawString(this.font,
+                        Component.translatable("screen.smalltools.enhancer.more", total - shown),
+                        this.leftPos + 26, y, MUTED, false);
             }
         }
 
@@ -247,24 +276,24 @@ public class EnhancerScreen extends AbstractContainerScreen<EnhancerMenu> {
         }
 
         // ---- 消耗与持有量 ----
-        int costColor = this.lapis >= 1 && !exhausted && !ready ? OK : MUTED;
+        int costColor = this.canInvest ? OK : MUTED;
         graphics.drawCenteredString(this.font,
                 Component.translatable("screen.smalltools.enhancer.have", this.lapis),
                 centerX, this.topPos + 196, costColor);
 
-        // ---- 结果提示 ----
+        // ---- 结果提示（贴着标题画，避开 92 的空槽提示和附魔列表）----
         if (!this.result.getString().isEmpty()) {
             graphics.drawCenteredString(this.font, this.result, centerX,
-                    this.topPos + 96, ready ? GOLD : OK);
+                    this.topPos + 22, this.canEnhance ? GOLD : OK);
         }
 
         if (this.enhanceButton != null) {
-            // 强化按钮：进度满了才能按
-            this.enhanceButton.active = ready;
+            // 强化按钮：能不能点只读服务端的 canEnhance
+            this.enhanceButton.active = this.canEnhance;
         }
         if (this.investButton != null) {
-            // 投入按钮：还没有满、还有材料、还有次数
-            this.investButton.active = !ready && !exhausted && this.lapis >= 1;
+            // 投入按钮：能不能点只读服务端的 canInvest（状态 + 是否已投满 + 材料够不够）
+            this.investButton.active = this.canInvest;
         }
     }
 

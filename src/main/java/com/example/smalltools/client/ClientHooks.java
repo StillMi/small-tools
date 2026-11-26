@@ -43,4 +43,34 @@ public final class ClientHooks {
     public static void openTargetScreen(InteractionHand hand) {
         PortalTargetScreen.open(hand);
     }
+
+    /** 打开同伴传送石的选人界面。只应在客户端调用。 */
+    public static void openCompanionScreen() {
+        CompanionTargetScreen.open();
+    }
+
+    /** 选人界面收到服务端推来的在线玩家名单。 */
+    public static void onCompanionRoster(com.example.smalltools.net.CompanionRosterPayload payload) {
+        if (net.minecraft.client.Minecraft.getInstance().screen
+                instanceof CompanionTargetScreen screen) {
+            screen.accept(payload);
+        }
+    }
+
+    /**
+     * 有人请求传送到自己身边，或者服务端把那个请求撤下了。
+     *
+     * <p>{@code cancel} 只有一种情况需要处理：确认框正开着就把它关掉；
+     * 已经关掉了就什么都不做。</p>
+     */
+    public static void onCompanionPrompt(com.example.smalltools.net.CompanionPromptPayload payload) {
+        net.minecraft.client.Minecraft minecraft = net.minecraft.client.Minecraft.getInstance();
+        if (payload.cancel()) {
+            if (minecraft.screen instanceof CompanionPromptScreen screen) {
+                screen.closeFromServer();
+            }
+            return;
+        }
+        minecraft.setScreen(new CompanionPromptScreen(payload));
+    }
 }

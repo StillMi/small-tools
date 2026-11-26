@@ -13,13 +13,14 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
  * 客户端 → 服务端：请求一次强化。
  *
  * <p>不带任何参数 —— 消耗多少、强化哪条全由服务端决定。
- * 客户端连"强化几次"都没法伪造。</p>
+ * 客户端连“强化几次”都没法伪造；{@code kind} 只有下面三个合法值，
+ * 其它值一律忽略（不回包、不动作）。</p>
  */
 public record EnhanceActionPayload(int containerId, int kind) implements CustomPacketPayload {
 
-    /** 请求刷新一次状态（界面刚打开时用）。 */
+    /** 请求刷新一次状态（界面刚打开时用，带节流）。 */
     public static final int KIND_REFRESH = 0;
-    /** 投入一颗浓缩液态青金。 */
+    /** 一次性投入这一档所需的全部浓缩液态青金。 */
     public static final int KIND_INVEST = 1;
     /** 请求完成一次强化（进度必须已满）。 */
     public static final int KIND_ENHANCE = 2;
@@ -50,11 +51,17 @@ public record EnhanceActionPayload(int containerId, int kind) implements CustomP
                 return;
             }
             if (payload.kind() == KIND_INVEST) {
+                // 成功和失败都已经在菜单内部 sync 过了，这里不再补发，
+                // 否则一次点击要发两遍全量状态
                 menu.invest(player);
             } else if (payload.kind() == KIND_ENHANCE) {
                 menu.enhance();
+            } else if (payload.kind() == KIND_REFRESH) {
+                // 刷新是唯一需要回包的分支，带节流：两个 tick 内的重复请求直接丢弃
+                if (menu.shouldAcceptRefresh()) {
+                    EnhancerSyncPayload.send(player, menu);
+                }
             }
-            EnhancerSyncPayload.send(player, menu);
         });
     }
 }

@@ -6,10 +6,7 @@ import net.minecraft.world.entity.Entity;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
-import java.util.UUID;
 
 /**
  * 待执行的传送队列。
@@ -36,8 +33,11 @@ import java.util.UUID;
  *
  * <p>顺带解决另外两件事：</p>
  * <ul>
- *   <li>一座门有 6 个方块，同一次 {@code checkInsideBlocks} 会让 6 个方块实体各调一次
- *       {@code entityInside}；这里按实体去重，同 tick 只会排一次队；</li>
+ *   <li>同一实体同一 tick 只排一次队。注意：当前唯一的调用点是
+ *       {@code getPortalDestination}，而原版 {@code PortalProcessor} 每 tick 每实体
+ *       最多回调它一次，所以这条去重现在其实拦不到东西；它防的是将来出现第二个调用点
+ *       （比如直接在 {@code entityInside} 里排）时，同一个人被连排两次。真出现那种
+ *       情况，第二个请求会被丢掉，不会补发。</li>
  *   <li>扣次数改到传送真正完成之后，传送没发生就不扣。</li>
  * </ul>
  */
@@ -48,17 +48,34 @@ public final class PortalTeleports {
     }
 
     private static final List<Pending> QUEUE = new ArrayList<>();
-    private static final Set<UUID> QUEUED = new HashSet<>();
 
     private PortalTeleports() {
     }
 
-    /** 登记一次传送；同一实体重复登记会被忽略。 */
+    /**
+     * 登记一次传送；同一实体在同一 tick 内重复登记会被忽略。
+     *
+     * <p>直接扫队列，不另开一张 UUID 集合：队列平时就是 0~1 个元素，扫描比维护
+     * 第二份状态便宜，也不会出现"集合和队列不同步"或"集合跨世界残留"的问题。</p>
+     */
     public static void enqueue(RemotePortalBlockEntity portal, ServerLevel level, Entity entity) {
-        if (!QUEUED.add(entity.getUUID())) {
-            return;
+        for (Pending pending : QUEUE) {
+            if (pending.entity() == entity) {
+                return;
+            }
         }
         QUEUE.add(new Pending(portal, level, entity));
+    }
+
+    /**
+     * 清空队列。
+     *
+     * <p>队列正常每 tick 末尾都会排空，但服务器停止 / 换世界时静态字段会跨会话
+     * 保留对 {@link ServerLevel} 和 {@link Entity} 的强引用，所以留一个显式清理口，
+     * 由外部在 {@code ServerStoppedEvent} 上接线。</p>
+     */
+    public static void clear() {
+        QUEUE.clear();
     }
 
     /**
@@ -75,7 +92,6 @@ public final class PortalTeleports {
         }
         List<Pending> batch = new ArrayList<>(QUEUE);
         QUEUE.clear();
-        QUEUED.clear();
         for (Pending pending : batch) {
             pending.portal().executeTeleport(pending.level(), pending.entity());
         }

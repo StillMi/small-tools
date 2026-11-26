@@ -4,7 +4,8 @@
 本机的 Gradle 跑不起来（native-platform 加载失败），所以用这个脚本代替 `gradlew build`：
 
   * 类文件来自 `build/classes`（由 `tools/compile.ps1` 里的 javac 命令生成）
-  * 资源来自 `src/main/resources`，其中的 `${...}` 用 `gradle.properties` 里的值展开
+  * 资源来自 `src/main/resources`，以及 `src/generated/resources`（存在的话），
+    其中的 `${...}` 用 `gradle.properties` 里的值展开
   * 时间戳固定，同样的输入永远得到同样的 jar（可复现构建）
 
 用法：
@@ -24,7 +25,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CLASSES = ROOT / "build" / "classes"
-RESOURCES = ROOT / "src" / "main" / "resources"
+# 与 build.gradle 的 sourceSets.main.resources 保持一致；不存在的目录直接跳过
+RESOURCE_ROOTS = [
+    ROOT / "src" / "main" / "resources",
+    ROOT / "src" / "generated" / "resources",
+]
 PROPERTIES = ROOT / "gradle.properties"
 OUT_DIR = ROOT / "build" / "libs"
 
@@ -82,17 +87,26 @@ def collect() -> list[tuple[str, bytes]]:
         name = path.relative_to(CLASSES).as_posix()
         entries.append((name, path.read_bytes()))
 
-    for path in sorted(RESOURCES.rglob("*")):
-        if not path.is_file():
+    seen: set[str] = set()
+    for root in RESOURCE_ROOTS:
+        if not root.is_dir():
             continue
-        name = path.relative_to(RESOURCES).as_posix()
-        if path.suffix.lower() in TEXT_SUFFIXES:
-            text = expand(path.read_text(encoding="utf-8"), props, name)
-            if PLACEHOLDER.search(text):
-                raise SystemExit(f"{name}: 还有没展开的 ${{...}}")
-            entries.append((name, text.encode("utf-8")))
-        else:
-            entries.append((name, path.read_bytes()))
+        for path in sorted(root.rglob("*")):
+            if not path.is_file():
+                continue
+            name = path.relative_to(root).as_posix()
+            if name in seen:
+                # 两个资源根撞名时保留先出现的那个（与 Gradle 的 srcDir 优先级一致）
+                print(f"跳过重复资源：{name}（{root}）", file=sys.stderr)
+                continue
+            seen.add(name)
+            if path.suffix.lower() in TEXT_SUFFIXES:
+                text = expand(path.read_text(encoding="utf-8"), props, name)
+                if PLACEHOLDER.search(text):
+                    raise SystemExit(f"{name}: 还有没展开的 ${{...}}")
+                entries.append((name, text.encode("utf-8")))
+            else:
+                entries.append((name, path.read_bytes()))
 
     return entries
 

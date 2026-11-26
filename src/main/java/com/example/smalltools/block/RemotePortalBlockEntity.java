@@ -22,6 +22,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 
 import java.util.HashMap;
@@ -124,9 +125,27 @@ public class RemotePortalBlockEntity extends BlockEntity {
         return creator;
     }
 
+    /** 这座门属于哪一组坐标；给结构自检判断"这一格的门面是不是我的"。 */
+    public BlockPos getFrameOrigin() {
+        return frameOrigin;
+    }
+
+    /** 门的朝向，和 {@link #getFrameOrigin()} 一起构成门的身份。 */
+    public Direction getFrameFront() {
+        return frameFront;
+    }
+
+    /** 这座门是不是"共享计数"（没有创造者）。 */
+    private boolean isSharedBucket() {
+        return SHARED_ACTOR.equals(creator);
+    }
+
     /** 某个使用者在还能传送几次。 */
     public int leftFor(UUID actor) {
-        if (actor.equals(creator)) {
+        // 共享桶：v1.06 迁移过来的门没有创造者，creator 是 SHARED_ACTOR。
+        // 这时所有 actor 必须落到同一个计数上 —— 否则每个玩家都会从 othersLeft
+        // 的缺省值拿到一份满额 quota，谁都用不完，门永远不会消失。
+        if (isSharedBucket() || actor.equals(creator)) {
             return creatorLeft;
         }
         Integer left = othersLeft.get(actor);
@@ -135,8 +154,12 @@ public class RemotePortalBlockEntity extends BlockEntity {
 
     /** 记录某个使用者剩余次数；{@code 0} 会被明确写进表里，表示"已用完"。 */
     public void setLeftFor(UUID actor, int left) {
-        if (actor.equals(creator)) {
+        if (isSharedBucket() || actor.equals(creator)) {
             creatorLeft = left;
+        } else if (left >= quota) {
+            // 回到满额等于没有条目：leftFor 的缺省值会给出一模一样的数字，
+            // 留着只会让 othersLeft 随玩家数无限增长，最后每次存档都全量写盘。
+            othersLeft.remove(actor);
         } else {
             othersLeft.put(actor, left);
         }
@@ -154,19 +177,28 @@ public class RemotePortalBlockEntity extends BlockEntity {
     }
 
     /**
-     * 服务端每 tick 调用，但只有"主方块"真正执行结构自检，其余方块直接返回。
+     * 服务端每 tick 调用。
+     *
+     * <p>正常情况下只有"主方块"（{@link PortalManager#masterPos}）真正执行结构自检，
+     * 其余方块直接返回。但主方块可能被别的东西覆盖掉 —— 典型情况是别人在这座门的
+     * 门洞位置建门，{@code placeStructure} 带着 {@code building = true} 把方块换成
+     * 空气，{@code onRemove} 又被那道保护吞掉 —— 这时没人接力自检，剩下的门面会
+     * 带着 {@code configured = true} 一直把人传到旧 partner。所以主方块一旦不在
+     * （或者那一格换成了别的门的方块实体），当前方块就顶上。</p>
+     *
+     * <p>接管时用 {@link #checkPhase} 按坐标错开相位，几个方块不会同一 tick 一起跑。</p>
      */
     public void serverTick(ServerLevel level, BlockPos pos) {
         if (!configured) {
             return;
         }
-        if (!pos.equals(PortalManager.masterPos(frameOrigin, frameFront))) {
+        if (!pos.equals(PortalManager.masterPos(frameOrigin, frameFront)) && masterAlive(level)) {
             return;
         }
-        if (++tickCounter < CHECK_INTERVAL) {
+        tickCounter = (tickCounter + 1) % CHECK_INTERVAL;
+        if (tickCounter != checkPhase(pos)) {
             return;
         }
-        tickCounter = 0;
 
         if (PortalManager.isTearingDown() || PortalManager.isBuilding()) {
             brokenChecks = 0;
@@ -192,6 +224,24 @@ public class RemotePortalBlockEntity extends BlockEntity {
         }
     }
 
+    /** 自检相位：同一座门的几个方块按坐标错开，接管时不会同一 tick 一起跑。 */
+    private static int checkPhase(BlockPos pos) {
+        return Math.floorMod(pos.getX() * 31 + pos.getZ() * 17, CHECK_INTERVAL);
+    }
+
+    /** 主方块那一格是否还站着一个属于这座门的方块实体。 */
+    private boolean masterAlive(ServerLevel level) {
+        BlockPos master = PortalManager.masterPos(frameOrigin, frameFront);
+        if (!level.hasChunkAt(master)) {
+            // 没加载就当它还在：这里不能调 getBlockEntity，那会隐式同步加载，
+            // 而且会让剩下几个方块抢着接管。
+            return true;
+        }
+        return level.getBlockEntity(master) instanceof RemotePortalBlockEntity other
+                && other.getFrameOrigin().equals(frameOrigin)
+                && other.getFrameFront() == frameFront;
+    }
+
     /**
      * 门面方块被破坏（挖掘 / 爆炸 / 活塞等）时调用，立即让整对门失效。
      */
@@ -199,10 +249,19 @@ public class RemotePortalBlockEntity extends BlockEntity {
         if (!configured) {
             return;
         }
-        invalidatePair(level);
+        invalidatePair(level, brokenPos);
     }
 
     private void invalidatePair(ServerLevel level) {
+        invalidatePair(level, null);
+    }
+
+    /**
+     * @param skip 正在被 {@code setBlockState} 的那一格，拆除时跳过写入。
+     *             玩家往门面格里放方块时，{@code onRemove} 会在同一个调用栈里回调过来，
+     *             不跳过就会把玩家刚放下的方块再写成空气（方块被"吞"掉）。
+     */
+    private void invalidatePair(ServerLevel level, @Nullable BlockPos skip) {
         if (!configured) {
             return;
         }
@@ -210,15 +269,26 @@ public class RemotePortalBlockEntity extends BlockEntity {
         Direction front = frameFront;
         BlockPos partner = partnerOrigin;
         Direction partnerDir = partnerFront;
+        // 先拆、后改状态。PortalManager.invalidate 在 tearingDown / building 时会整段
+        // return，先把 configured 置 false 就会留下一座"方块还立着、BE 已经哑了"的门：
+        // serverTick 第一行直接返回、canAccept 恒 false，之后没有任何路径能让它自检或
+        // 失效，只能手动挖。放在后面，失败时下一轮自检还会再试一次。
+        // 重入由 PortalManager 的 tearingDown 挡住，不依赖这个字段。
+        PortalManager.invalidate(level, frame, front, partner, partnerDir, skip);
         configured = false;
-        PortalManager.invalidate(level, frame, front, partner, partnerDir);
     }
 
     /**
      * 这座门现在能不能接这个实体。
      *
-     * <p>只做判定、不改状态 —— {@link com.example.smalltools.block.RemotePortalBlock}
-     * 用它决定要不要把实体登记进原版的 {@code PortalProcessor}。</p>
+     * <p>{@link com.example.smalltools.block.RemotePortalBlock} 用它决定要不要把实体
+     * 登记进原版的 {@code PortalProcessor}。</p>
+     *
+     * <p><b>有副作用，不是纯判定</b>：配额用完时会给玩家发一条 action bar 提示
+     * （{@code message.smalltools.player_exhausted}），并让
+     * {@link PortalCooldowns#tryHint} 往节流表里写一条记录。它每 tick 会被 6 个门面
+     * 方块各调一次，刷屏靠 {@code PortalCooldowns} 的 {@code HINT_TICKS} 挡着，
+     * 所以别在没有节流的地方循环调用它。</p>
      */
     public boolean canAccept(Entity entity) {
         if (!configured || isRemoved()) {
@@ -270,6 +340,16 @@ public class RemotePortalBlockEntity extends BlockEntity {
         if (entity.level() != level) {
             return;
         }
+        // 排队到执行之间可能已经被别的系统传送过、打上了冷却。entityInside 那道
+        // 守卫只管"登记"，管不到已经排好队的这一次。
+        if (entity.isOnPortalCooldown()) {
+            return;
+        }
+        // canAccept 已经拒过骑乘，但排队到执行之间它可能刚骑上 / 被骑上；
+        // 传送会把坐骑和乘客拆开
+        if (entity.isPassenger() || entity.isVehicle()) {
+            return;
+        }
         // 排队之后可能被别的门先传走了、或者次数刚被用完，这里再确认一次
         UUID actor = actorOf(entity);
         if (leftFor(actor) <= 0) {
@@ -279,13 +359,24 @@ public class RemotePortalBlockEntity extends BlockEntity {
         // New arrivals stay over the inner half of the one-step entrance.
         // Legacy portals retain their wider platform spread.
         level.getChunk(partnerOrigin.getX() >> 4, partnerOrigin.getZ() >> 4);
-        boolean compactTarget = false;
+        // 对端必须还站着"属于这一对门"的方块实体。只看有没有 BE 不够：重叠建门时
+        // 那一格可能是另一座门的方块，按它的布局算落点会把人送到一个跟这对门无关的
+        // 位置。一个都没有就直接放弃 —— 既别按 legacy 散布算坐标，也别去挖空气。
+        RemotePortalBlockEntity partnerPortal = null;
         for (BlockPos pos : PortalManager.portalBlocks(partnerOrigin, partnerFront)) {
-            if (level.getBlockEntity(pos) instanceof RemotePortalBlockEntity other) {
-                compactTarget = other.hasCompactLayout();
+            if (level.getBlockEntity(pos) instanceof RemotePortalBlockEntity other
+                    && other.getFrameOrigin().equals(partnerOrigin)
+                    && other.getFrameFront() == partnerFront) {
+                partnerPortal = other;
                 break;
             }
         }
+        if (partnerPortal == null) {
+            LOGGER.debug("[smalltools] partner portal at {} is gone, dropping teleport of {}",
+                    partnerOrigin, entity.getName().getString());
+            return;
+        }
+        boolean compactTarget = partnerPortal.hasCompactLayout();
         double spreadX = ((entity.getUUID().hashCode() & 0xFF) / 255.0D - 0.5D)
                 * (compactTarget ? 0.8D : 1.5D);
         double spreadZ = compactTarget ? 0.0D : (((entity.getUUID().hashCode() >>> 8) & 0xFF) / 255.0D - 0.5D) * 0.5D;
@@ -375,7 +466,10 @@ public class RemotePortalBlockEntity extends BlockEntity {
         othersLeft.clear();
 
         if (tag.contains("CreatorLeft")) {
-            creator = tag.contains("Creator") ? tag.getUUID("Creator") : SHARED_ACTOR;
+            // getUUID 对坏掉的 / 手改过的 NBT 会返回 null，不兜底的话下一次
+            // saveAdditional 里的 putUUID 直接 NPE
+            UUID stored = tag.contains("Creator") ? tag.getUUID("Creator") : null;
+            creator = stored != null ? stored : SHARED_ACTOR;
             quota = Math.max(1, tag.getInt("Quota"));
             creatorLeft = tag.getInt("CreatorLeft");
             ListTag others = tag.getList("OthersLeft", Tag.TAG_COMPOUND);
@@ -387,11 +481,19 @@ public class RemotePortalBlockEntity extends BlockEntity {
             }
         } else if (tag.contains("Remaining")) {
             // v1.06 及更早的存档：整座门共用一个计数器。
-            // 迁移成"创造者个人计数器"，读档后行为不变（只是其他玩家有了自己的配额）
+            // 迁移成"共享计数"：creator 留空（SHARED_ACTOR），leftFor / setLeftFor
+            // 会把所有 actor 都映射到 creatorLeft，所以"整座门共用一份次数"的
+            // 行为不变，用尽时由 serverTick 的 creatorLeft <= 0 分支收尾。
             int legacy = Math.max(0, tag.getInt("Remaining"));
             creator = SHARED_ACTOR;
             quota = Math.max(1, legacy);
             creatorLeft = legacy;
+        } else if (configured) {
+            // 认得的两个计数键都没有：按"满额"兜底。留 0 的话 serverTick 的
+            // creatorLeft <= 0 分支会在 20~40 tick 后把整对门当过期拆掉。
+            creator = SHARED_ACTOR;
+            quota = Math.max(1, quota);
+            creatorLeft = quota;
         }
         // 注意：次数已经用尽的门在这里不能清 —— loadAdditional 拿不到 level。
         // 清理交给 serverTick，见那里的 creatorLeft <= 0 分支。

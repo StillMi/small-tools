@@ -20,10 +20,17 @@ import java.util.List;
  * 服务端 → 客户端：强化界面的当前状态。
  *
  * <p>传四样东西：物品上的附魔列表（显示名 + 等级 + 是否满级）、
- * 下一次消耗、玩家持有的凝造青金数、以及最近一次操作的结果提示。</p>
+ * 下一次消耗、玩家持有的浓缩液态青金数、以及最近一次操作的结果提示。</p>
  *
  * <p>显示名由服务端用 {@code Enchantment.getFullname} 生成 ——
  * 客户端不拼翻译键（拼出来的键对模组附魔不成立）。</p>
+ *
+ * <h2>为什么要打包</h2>
+ *
+ * <p>{@code StreamCodec.composite} 最多只有 6 个参数位置，这里把 4 个 int 折成 2 个：
+ * {@code packed} 低 8 位是已强化次数、中间 16 位是已投入经验、bit 24 / bit 25 是
+ * “投入按钮能不能点”和“强化按钮能不能点”；{@code packed2} 低 16 位是持有数量、
+ * 高 16 位是下一档经验需求。解包一律带掩码，高位才不会串味。</p>
  */
 public record EnhancerSyncPayload(int containerId,
                                   List<Entry> enchantments,
@@ -32,9 +39,17 @@ public record EnhancerSyncPayload(int containerId,
                                   int packed,
                                   Component result) implements CustomPacketPayload {
 
-    /** 把 used / fill 打包成一个 int，省出流参数的位置。 */
-    public static int pack(int used, int fill) {
-        return (used & 0xFF) | ((fill & 0xFFFF) << 8);
+    /**
+     * 把 used / fill / 两个按钮状态打包成一个 int。
+     *
+     * <p>填充值的合法上限是 160（{@code xpForStep(5)}），16 位绰绰有余；
+     * 次数上限 5，8 位也够。两个状态位放进原本空着的 bit 24 / bit 25。</p>
+     */
+    public static int pack(int used, int fill, boolean canInvest, boolean canEnhance) {
+        return (used & 0xFF)
+                | ((fill & 0xFFFF) << 8)
+                | (canInvest ? 1 << 24 : 0)
+                | (canEnhance ? 1 << 25 : 0);
     }
 
     public int used() {
@@ -43,6 +58,16 @@ public record EnhancerSyncPayload(int containerId,
 
     public int fill() {
         return (this.packed >>> 8) & 0xFFFF;
+    }
+
+    /** 服务端算出来的“投入按钮能不能点”。 */
+    public boolean canInvest() {
+        return ((this.packed >>> 24) & 1) != 0;
+    }
+
+    /** 服务端算出来的“强化按钮能不能点”。 */
+    public boolean canEnhance() {
+        return ((this.packed >>> 25) & 1) != 0;
     }
 
     /** 把 lapis / xpNeed 打包成第二个 int。 */
@@ -102,15 +127,12 @@ public record EnhancerSyncPayload(int containerId,
             }
         }
 
-        String key = menu.lastResult();
-        Component result = key == null || key.isEmpty()
-                ? Component.empty()
-                : Component.translatable(key);
-
         PacketDistributor.sendToPlayer(player, new EnhancerSyncPayload(
                 menu.containerId, list, menu.costFor(stack),
                 pack2(menu.lapisCount(), menu.xpNeedFor(stack)),
-                pack(menu.enhanceCount(stack), menu.fillOf(stack)), result));
+                pack(menu.enhanceCount(stack), menu.fillOf(stack),
+                        menu.canInvest(stack), menu.canEnhance(stack)),
+                menu.lastResult()));
     }
 
     public static void handle(EnhancerSyncPayload payload, IPayloadContext context) {

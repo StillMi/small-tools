@@ -59,8 +59,9 @@ public class PortalTargetScreen extends Screen {
 
         // 回车直接提交，省得每次都去点按钮
         for (EditBox box : new EditBox[]{this.xBox, this.yBox, this.zBox}) {
-            // 只允许数字和负号，顺手把非法输入挡住
-            box.setFilter(text -> text.isEmpty() || text.equals("-") || text.matches("-?\\d{0,9}"));
+            // 只允许数字和负号。最多 8 位数字 + 符号 = 9 个字符：
+            // 世界边界是 ±29,999,984，9 位数本来就到不了，输入框别假装能填
+            box.setFilter(text -> text.isEmpty() || text.equals("-") || text.matches("-?\\d{0,8}"));
         }
 
         int buttonY = top + ROW_HEIGHT * 3 + 8;
@@ -93,7 +94,7 @@ public class PortalTargetScreen extends Screen {
     private EditBox addField(int x, int y, int width, String label, int value) {
         EditBox box = new EditBox(this.font, x, y, width, 18,
                 Component.translatable("screen.smalltools.target." + label.toLowerCase()));
-        box.setMaxLength(12);
+        box.setMaxLength(9);
         box.setValue(Integer.toString(value));
         this.addRenderableWidget(box);
         return box;
@@ -132,7 +133,8 @@ public class PortalTargetScreen extends Screen {
             // 有格子不是合法整数：留在界面上让玩家改，不关窗
             return;
         }
-        PacketDistributor.sendToServer(new SetTargetPayload(new BlockPos(x, y, z)));
+        // 手上带过去：服务端只认这只手，免得双手各一颗时改错对象
+        PacketDistributor.sendToServer(new SetTargetPayload(new BlockPos(x, y, z), this.hand));
         this.onClose();
     }
 

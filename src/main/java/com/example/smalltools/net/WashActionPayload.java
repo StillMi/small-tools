@@ -24,7 +24,7 @@ public record WashActionPayload(int containerId, int kind, int index) implements
 
     public static final int KIND_ENTRY = 0;
     public static final int KIND_CANDIDATE = 1;
-    /** 界面刚打开时请求一次状态。 */
+    /** 界面刚打开 / 被 resize 重建时，请求服务端把现有状态重发一遍（不重算）。 */
     public static final int KIND_REFRESH = 2;
 
     public static final CustomPacketPayload.Type<WashActionPayload> TYPE =
@@ -57,15 +57,16 @@ public record WashActionPayload(int containerId, int kind, int index) implements
                 return;
             }
 
+            // 各分支自己负责把状态推回客户端，这里不再补发第二份：
+            // KIND_REFRESH 走 resend()（只发包）；KIND_ENTRY / KIND_CANDIDATE
+            // 在菜单内部就 sync() 过。补发会让界面一次点击收到两份、按钮闪一下。
             if (payload.kind() == KIND_REFRESH) {
-                menu.refresh(level);
+                menu.resend();
             } else if (payload.kind() == KIND_ENTRY) {
                 menu.chooseEntry(level, payload.index());
             } else if (payload.kind() == KIND_CANDIDATE) {
                 menu.applyCandidate(player, payload.index());
             }
-            // 状态变化后推一份新的给客户端
-            WashStoneSyncPayload.send(player, menu);
         });
     }
 }

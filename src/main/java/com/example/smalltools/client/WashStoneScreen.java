@@ -24,7 +24,7 @@ import java.util.List;
  *   y=8    标题
  *   y=20   运气文字    y=30 运气条
  *   y=58   输入槽（18×18，水平居中）
- *   y=86   分隔线       y=84~94 提示
+ *   y=80   分隔线       y=84 警告 / y=94 提示
  *   y=104  选项按钮（每条 20 高，步进 23）
  *   y=186  物品栏那一行（9 格，每格带分界线）
  * </pre>
@@ -207,7 +207,9 @@ public class WashStoneScreen extends AbstractContainerScreen<WashStoneMenu> {
         int v = this.topPos + INV_V;
 
         for (int i = 0; i < 9; i++) {
-            int x = u + i * 18;
+            // 槽位真实位置是 INV_U + 1 + i * 18（物品落在 x+1..x+17），
+            // 所以绘制基准也要 +1，内格才正好压在物品上、外框正好铺满 18 像素不重叠。
+            int x = u + i * 18 + 1;
             g.fill(x - 1, v - 1, x + 17, v + 17, 0xFF241436);
             g.fill(x, v, x + 16, v + 16, 0xFF140B22);
             g.fill(x - 1, v - 1, x + 17, v, withAlpha(ACCENT_SOFT, 110));
@@ -258,19 +260,26 @@ public class WashStoneScreen extends AbstractContainerScreen<WashStoneMenu> {
         graphics.drawString(this.font, luckText,
                 this.leftPos + 20, this.topPos + 20, full ? GOLD : MUTED, false);
 
-        graphics.fill(this.leftPos + 16, this.topPos + 86,
-                this.leftPos + PANEL_W - 16, this.topPos + 87,
+        // 分隔线放在 80：84 行是状态文字（8 像素高，占 84~91），
+        // 原来放在 86 会被文字压住。输入槽到 78 结束，80 也不会顶到它。
+        graphics.fill(this.leftPos + 16, this.topPos + 80,
+                this.leftPos + PANEL_W - 16, this.topPos + 81,
                 withAlpha(ACCENT_SOFT, 90));
 
         Component hint;
         int color = MUTED;
 
-        if (!this.candidates.isEmpty()) {
-            hint = Component.translatable("screen.smalltools.wash.pick_candidate");
-            color = ACCENT;
-        } else if (this.locked) {
-            hint = Component.translatable("screen.smalltools.wash.no_candidate");
-            color = DANGER;
+        // 状态文案必须互斥：锁定态只画一行，并且画的是"石头还没扣"那一句。
+        // 以前这里同时画"已消耗"和"选新附魔（会被消耗）"，两句话自相矛盾。
+        if (this.locked) {
+            if (this.candidates.isEmpty()) {
+                // 理论上不会走到：锁定却拿不到候选说明没有可换的附魔
+                hint = Component.translatable("screen.smalltools.wash.no_candidate");
+                color = DANGER;
+            } else {
+                hint = Component.translatable("screen.smalltools.wash.pick_candidate");
+                color = ACCENT;
+            }
         } else if (!this.entries.isEmpty()) {
             graphics.drawCenteredString(this.font,
                     Component.translatable("screen.smalltools.wash.warning")
@@ -281,13 +290,6 @@ public class WashStoneScreen extends AbstractContainerScreen<WashStoneMenu> {
             hint = Component.translatable("screen.smalltools.wash.insert");
         }
         graphics.drawCenteredString(this.font, hint, centerX, this.topPos + 94, color);
-
-        if (this.locked) {
-            graphics.drawCenteredString(this.font,
-                    Component.translatable("screen.smalltools.wash.consumed")
-                            .withStyle(ChatFormatting.YELLOW),
-                    centerX, this.topPos + 84, OK);
-        }
     }
 
     @Override

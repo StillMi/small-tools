@@ -65,8 +65,10 @@ public class MagicButton extends Button {
         if (highlighted) {
             edgeColor = EDGE_SELECTED;
         } else if (hovered) {
-            // 悬停时描边呼吸，让"可以被点"这件事更明显
-            float breathe = 0.6F + 0.4F * Mth.sin(now / 260.0F);
+            // 悬停时描边呼吸，让"可以被点"这件事更明显。
+            // 必须先取模再转 float：Mth.sin 内部是 SIN[(int)(value*65536/PI) & 65535]，
+            // 直接把毫秒数传进去会溢出 int、下标被钉死成常数，呼吸就变一动不动。
+            float breathe = 0.6F + 0.4F * Mth.sin((now % 4000L) / 260.0F);
             edgeColor = withAlpha(EDGE_HOVER, (int) (170 + 85 * breathe));
         } else {
             edgeColor = EDGE;

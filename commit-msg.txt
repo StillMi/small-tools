@@ -1,0 +1,59 @@
+Add the companion portal stone and fix the bugs a full audit turned up
+
+The companion stone asks the target player, waits ten seconds and is spent
+only once the sender has actually landed next to them.
+
+Six read-only auditors went through the mod block by block; every finding
+was re-checked against the source before it was fixed.
+
+Companion stone:
+- findLanding required standable(pos) and standable(pos.above()); the first
+  already proves pos is air, which can never hold up the block above it, so
+  the pair was unsatisfiable and the stone had never once teleported anyone
+- the panel was drawn after super.render and buried the accept/reject buttons
+- accepting could start a second countdown on top of a running one
+- the stone was spent even when the teleport was cancelled by another mod
+- a request kept hanging until timeout when either side logged out
+
+Portal runtime:
+- old saves migrate to a SHARED_ACTOR creator, but the quota tables only
+  matched actor.equals(creator), so every player got a fresh quota and the
+  pair never expired
+- the structure self-check only ran on the master block, and the onRemove
+  fallback is skipped while building, so a master overwritten by another
+  portal left the rest of the frame teleporting to a stale partner
+- configured was cleared before an invalidate that can no-op, leaving a
+  portal that still stands but can no longer be used or removed
+- a partner with no reachable block entity still teleported the entity
+- block placement in a portal frame was swallowed by a re-entrant write
+
+Portal building:
+- the doorway clearing loop skipped block entities while the placement loop
+  overwrote the same cells, deleting chests and spawners together with their
+  contents
+- closing a previous pair destroyed both ends whenever a single one stood,
+  flattening whatever the player had rebuilt on the other side
+- sites were chosen before the old pair was taken down, so rebuilding in
+  place always failed with NO_GROUND
+- nothing checked whether a player occupied the far end
+
+Wash stone:
+- the locked check ran after the lists were cleared, so resizing the window
+  wiped the candidates, stranded the input slot and kept the stone
+- the stone was charged when an entry was picked, not when the swap landed
+- the list was not rebuilt after a swap because the edit bypassed setChanged
+- candidates ignored exclusive_set and could roll Sharpness with Smite
+
+Enhancer:
+- invested xp was stranded forever once the item could no longer be worked on
+- tryFill ignored exclusive_set and treasure enchantments
+- the client kept its own copy of the button rules while canEnhance had no
+  callers at all
+- the menu showed nine hotbar slots but counted all thirty-six
+
+Tooling:
+- deploy.py deleted every installed jar before copying, so a locked jar left
+  the mods directory empty; it now copies to a temp file, verifies and does an
+  atomic replace, and only prunes versions older than the one being deployed
+- MagicButton fed raw milliseconds into Mth.sin, which saturates the int and
+  froze the hover outline

@@ -39,7 +39,7 @@ public final class PortalCooldowns {
     private PortalCooldowns() {
     }
 
-    /** 配置里的冷却时长（tick）；0 表示退回原版玩家的 10 tick。 */
+    /** 配置里的冷却时长（tick）；0 表示退回原版的 10 tick（0.5 秒）。 */
     private static int cooldownTicks() {
         int seconds = Math.max(0, Config.TELEPORT_DELAY_SECONDS.get());
         return seconds > 0 ? seconds * 20 : 10;
@@ -53,16 +53,6 @@ public final class PortalCooldowns {
     /** 传送成功后开始冷却 —— 写原版字段，原版每 tick 自己递减。 */
     public static void markPassed(Entity entity) {
         entity.setPortalCooldown(cooldownTicks());
-    }
-
-    /** 还剩多少 tick，仅用于提示。 */
-    public static int remainingTicks(Entity entity) {
-        return Math.max(0, entity.getPortalCooldown());
-    }
-
-    /** 撤销冷却（排了队但最终没传成时用）。 */
-    public static void releasePass(Entity entity) {
-        entity.setPortalCooldown(0);
     }
 
     /** 提示节流：同一实体 {@link #HINT_TICKS} tick 内只提示一次。 */

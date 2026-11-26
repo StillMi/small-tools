@@ -181,7 +181,17 @@ public final class PortalManager {
     public static Result openPortalPair(ServerLevel level, ServerPlayer player, @Nullable BlockPos boundTarget) {
         NearEnd near = resolveNearEnd(level, player);
         if (!near.ok()) {
-            return near.error();
+            // 上一对门还立在世界里，它自己的门框和台阶会被当成障碍物，
+            // 于是"原地重开"经常选不出落点。只有真的选不出时才拆旧门、再试一次；
+            // 这样新门没建成也不会白白弄丢旧门。
+            if (near.error() != Result.NO_GROUND) {
+                return near.error();
+            }
+            closePrevious(level, player);
+            near = resolveNearEnd(level, player);
+            if (!near.ok()) {
+                return near.error();
+            }
         }
 
         BlockPos target = findTarget(level, near.front(), boundTarget);
@@ -192,8 +202,16 @@ public final class PortalManager {
         int uses = Math.max(2, Config.ROUND_TRIPS.get() * 2);
         UUID creator = player.getUUID();
         closePrevious(level, player);
-        placeStructure(level, near.origin(), near.front(), target, near.front(), creator, uses, true);
-        placeStructure(level, target, near.front(), near.origin(), near.front(), creator, uses, true);
+
+        // 预检不过就整套放弃：宁可这一趟不开门，也不覆盖玩家放的箱子 / 建筑
+        if (!placeStructure(level, near.origin(), near.front(), target, near.front(), creator, uses, true)) {
+            return Result.NO_GROUND;
+        }
+        if (!placeStructure(level, target, near.front(), near.origin(), near.front(), creator, uses, true)) {
+            // 另一端放不下：把已经建好的这一端拆掉，别留半座门
+            destroyIntactEnds(level, new End(near.origin(), near.front()));
+            return Result.NO_GROUND;
+        }
         remember(level, player, near.origin(), near.front(), target, near.front());
 
         warnIfSelfCovered(player, near.origin(), near.front());
@@ -237,7 +255,15 @@ public final class PortalManager {
     public static Result openDungeonPortalPair(ServerLevel level, ServerPlayer player) {
         NearEnd near = resolveNearEnd(level, player);
         if (!near.ok()) {
-            return near.error();
+            // 同 openPortalPair：先按现状选一次，选不出来才拆旧门重试
+            if (near.error() != Result.NO_GROUND) {
+                return near.error();
+            }
+            closePrevious(level, player);
+            near = resolveNearEnd(level, player);
+            if (!near.ok()) {
+                return near.error();
+            }
         }
 
         int radius = Math.max(1, Config.DUNGEON_RADIUS_CHUNKS.get());
@@ -269,8 +295,15 @@ public final class PortalManager {
         closePrevious(level, player);
 
         // 地牢那一端用紧凑结构：只有门框 + 门面，没有高台和台阶
-        placeStructure(level, dungeonOrigin, front, near.origin(), near.front(), creator, uses, false);
-        placeStructure(level, near.origin(), near.front(), dungeonOrigin, front, creator, uses, true);
+        if (!placeStructure(level, dungeonOrigin, front, near.origin(), near.front(), creator, uses, false)) {
+            // 这面墙里塞着箱子 / 刷怪笼：换一个地牢太贵，直接当"这个地牢开不了"
+            return Result.NO_DUNGEON;
+        }
+        if (!placeStructure(level, near.origin(), near.front(), dungeonOrigin, front, creator, uses, true)) {
+            // 近端放不下：把已经建好的地牢端拆掉
+            destroyIntactEnds(level, new End(dungeonOrigin, front));
+            return Result.NO_GROUND;
+        }
 
         // 兜底：万一还是被覆盖了，别把半座门留给玩家。
         // 只拆确实建成的那一端 —— 没建成的那一端坐标上可能是玩家自己的方块
@@ -443,27 +476,42 @@ public final class PortalManager {
      * 以前的写法是"不管还在不在都拆"，等于拿一段过期坐标去清玩家的黑曜石和台阶，
      * 4×5 范围内所有黑曜石都会被当成"我放的"清成空气。</p>
      *
-     * <p>现在结构不完整就只清掉记录、直接返回，一根方块都不碰。</p>
+     * <p>现在<b>两端分开判</b>：只拆还立着的那一端；另一端（早就没了、地被玩家重新利用
+     * 过的那一端）一根方块都不碰。两头都不完整就只清掉记录。</p>
+     *
+     * <p>顺带，{@code forget} 挪到"维度还在"之后。以前是先 forget 再判
+     * {@code getLevel} 是不是 {@code null}，那个维度没加载时记录先丢了、门却还立着，
+     * 玩家于是能同时拥有两对活门。</p>
      */
     private static void closePrevious(ServerLevel level, ServerPlayer player) {
+        // 拆除守卫为真时 invalidate 会被静默吞掉；这里要是已经 forget 了，
+        // 这对门就彻底失联（既拆不掉、也没人记着），所以先判守卫
+        if (tearingDown || building) {
+            return;
+        }
         MinecraftServer server = level.getServer();
         PortalRegistry registry = PortalRegistry.get(server);
         PortalRegistry.Entry previous = registry.get(player.getUUID());
         if (previous == null) {
             return;
         }
-        registry.forget(player.getUUID());
 
         ServerLevel other = server.getLevel(previous.dimension());
         if (other == null) {
-            return; // 那个维度没加载，只能等它自己失效
-        }
-        // 门早就没了：只清记录，绝不能拿过期坐标去拆方块
-        if (!isStructureIntact(other, previous.origin(), previous.front())
-                && !isStructureIntact(other, previous.partner(), previous.partnerFront())) {
+            // 那个维度没加载：记录留着，等它加载后再处理，别把门丢成孤儿
             return;
         }
-        invalidate(other, previous.origin(), previous.front(), previous.partner(), previous.partnerFront());
+
+        boolean originIntact = isStructureIntact(other, previous.origin(), previous.front());
+        boolean partnerIntact = isStructureIntact(other, previous.partner(), previous.partnerFront());
+        registry.forget(player.getUUID());
+        if (!originIntact && !partnerIntact) {
+            return; // 门早就没了：只清记录，绝不能拿过期坐标去拆方块
+        }
+
+        destroyIntactEnds(other,
+                originIntact ? new End(previous.origin(), previous.front()) : null,
+                partnerIntact ? new End(previous.partner(), previous.partnerFront()) : null);
         player.displayClientMessage(Component.translatable("message.smalltools.previous_closed")
                 .withStyle(ChatFormatting.DARK_PURPLE), true);
     }
@@ -502,7 +550,8 @@ public final class PortalManager {
      * 扣掉 {@code actor} 的一次使用次数，并把计数同步到两端。
      *
      * <p>次数是按人分开算的：只有<b>创造者</b>的计数归零才会拆掉整座门；
-     * 其他玩家归零只是自己不能再传送，门继续开着。</p>
+     * 其他玩家归零只是自己不能再传送，门继续开着。从旧存档迁移来的门是"共享桶"，
+     * 没有创造者（{@code creator} 为 {@code SHARED_ACTOR}），按创造者对待。</p>
      *
      * <p>两端各 6 个方块都存着一份完整计数（谁用了几次都在里面），所以这里必须
      * <b>先读、改、再写回两端</b>。多人同时穿门时，两个调用会先后落在服务端主线程上，
@@ -531,7 +580,12 @@ public final class PortalManager {
         applyUsage(level, origin, front, source);
         applyUsage(level, partner, partnerFront, source);
 
-        if (left <= 0 && actor.equals(source.getCreator())) {
+        // 创造者用完最后一份就拆门。迁移过来的旧存档门是"共享桶"，creator 是
+        // SHARED_ACTOR 而不是某个玩家 UUID，光比 actor 永远不成立 —— 那样次数用光
+        // 只能等 serverTick 的 creatorLeft <= 0 兜底（最迟 40 tick），玩家还会看到
+        // player_exhausted 而不是 expired。
+        if (left <= 0 && (actor.equals(source.getCreator())
+                || RemotePortalBlockEntity.SHARED_ACTOR.equals(source.getCreator()))) {
             invalidate(level, origin, front, partner, partnerFront);
             return 0;
         }
@@ -554,13 +608,25 @@ public final class PortalManager {
      */
     public static void invalidate(ServerLevel level, BlockPos origin, Direction front,
                                   BlockPos partner, Direction partnerFront) {
+        invalidate(level, origin, front, partner, partnerFront, null);
+    }
+
+    /**
+     * 同上，但跳过 {@code skip} 这个位置。
+     *
+     * <p>用于"玩家刚把这个位置的方块换掉"的场合：替换会触发旧方块的 {@code onRemove}，
+     * 那里再往同一个位置写一次空气，玩家刚放下的方块就被吞掉了。传 {@code null}
+     * 表示不跳过任何位置。</p>
+     */
+    public static void invalidate(ServerLevel level, BlockPos origin, Direction front,
+                                  BlockPos partner, Direction partnerFront, @Nullable BlockPos skip) {
         if (tearingDown || building) {
             return;
         }
         tearingDown = true;
         try {
-            destroyStructure(level, origin, front, null);
-            destroyStructure(level, partner, partnerFront, null);
+            destroyStructure(level, origin, front, skip);
+            destroyStructure(level, partner, partnerFront, skip);
         } finally {
             tearingDown = false;
         }
@@ -678,7 +744,9 @@ public final class PortalManager {
                         }
                         // 六个支撑列等高，门底和单级台阶直接放在地面上
                         BlockPos origin = new BlockPos(probe.getX(), bounds.min() + BASE_OFFSET, probe.getZ());
-                        if (hasRoom(level, origin, front)) {
+                        // 光有空间不够：压着箱子/别人方块的地方直接跳过（见 siteBuildable），
+                        // 否则预检会在 placeStructure 里整体放弃，这一格明明有地却开不出门
+                        if (hasRoom(level, origin, front) && siteBuildable(level, origin, front, true)) {
                             return origin;
                         }
                     }
@@ -868,6 +936,38 @@ public final class PortalManager {
     }
 
     /**
+     * 目标端那片地上是不是已经站着人。
+     *
+     * <p>近端有 {@link #playerClear} 把关，远端以前什么都不查：绑定的坐标正好落在
+     * 别处的村庄广场时，黑曜石会直接盖在玩家或村民身上。远端不可能站着开门的人
+     * （他人在近端），所以这里对<b>所有</b>玩家一视同仁，谁被压到就换个落点。</p>
+     */
+    private static boolean anyPlayerInside(ServerLevel level, BlockPos origin, Direction front) {
+        List<Piece> layout = pieces(origin, front,
+                SmallTools.REMOTE_PORTAL.get().defaultBlockState(), true);
+        java.util.Set<BlockPos> solid = new java.util.HashSet<>(layout.size() * 2);
+        for (Piece piece : layout) {
+            if (blocksPlayer(piece.state())) {
+                solid.add(piece.pos());
+            }
+        }
+        if (solid.isEmpty()) {
+            return false;
+        }
+
+        Box box = structureBox(origin, front, true);
+        AABB area = new AABB(
+                box.minX() - 1.0D, box.minY() - 1.0D, box.minZ() - 1.0D,
+                box.maxX() + 2.0D, box.maxY() + 2.0D, box.maxZ() + 2.0D);
+        for (ServerPlayer player : level.getEntitiesOfClass(ServerPlayer.class, area)) {
+            if (occupies(solid, player)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * 在 (x, z) 这一列上，从 {@code referenceY} 起上下交替地找最近的一个能站人的位置。
      *
      * @return 地面那一格的 y（脚踩的高度）；找不到返回 {@code null}
@@ -1020,6 +1120,13 @@ public final class PortalManager {
      *   <li>那一带放不下整座门（山地、水面、树多、有别人的建筑）时，
      *       按 {@code targetSearchRadius} 由近到远向周围找空地。</li>
      * </ul>
+     *
+     * <p><b>代价说实话：</b>默认 {@code targetSearchRadius = 16}，{@code (anchor ± 16) >> 4}
+     * 只跨 <b>3×3 = 9 个区块</b>（1089 是这一带的方块列数，不是区块数）；半径拉满 128 才
+     * 17×17 = <b>289 个区块</b>。下面那句 {@code level.getChunk(...)} 是<b>同步生成</b>：
+     * 区块没生成过就在服务端主线程上现建。默认配置是"顿一下"，拉满时目标又落在未探索的
+     * 远海／高山，第一次开门会有肉眼可见的卡顿。这是有意的取舍（宁可卡一下也要把门开到
+     * 玩家写的坐标），别当成 bug 去改算法。</p>
      */
     private static BlockPos findTarget(ServerLevel level, Direction front, @Nullable BlockPos boundTarget) {
         BlockPos destination = boundTarget != null
@@ -1045,6 +1152,11 @@ public final class PortalManager {
      *
      * <p>注意<b>只往水平方向外扩</b>：Y 由地形自己决定，不跟着半径乱跑，
      * 否则半径一大门就可能跑到几十格高的山上去。</p>
+     *
+     * <p><b>下面那个预热循环是要花钱的</b>：半径 16 → 3×3 = 9 个区块，拉满 128 →
+     * 17×17 = 289 个区块，每次 {@code level.getChunk} 都可能触发<b>同步地形生成</b>，
+     * 全在服务端主线程。所以别在这里顺手把半径乘个大系数，也别把预热挪进
+     * "每个候选地面各来一遍"的内层循环。</p>
      *
      * @return 结构原点；整个范围内都放不下返回 {@code null}
      */
@@ -1085,7 +1197,10 @@ public final class PortalManager {
                                 continue;
                             }
                             BlockPos origin = new BlockPos(probe.getX(), bounds.min() + BASE_OFFSET, probe.getZ());
-                            if (hasRoom(level, origin, front)) {
+                            // 目标端是"落地即用"的：既要能铺得下去，也不能压在别人身上
+                            if (hasRoom(level, origin, front)
+                                    && siteBuildable(level, origin, front, true)
+                                    && !anyPlayerInside(level, origin, front)) {
                                 return origin;
                             }
                         }
@@ -1109,36 +1224,44 @@ public final class PortalManager {
     /**
      * 生成简洁门：门框、门面和紧接门槛的一节台阶，不铺高台或支撑柱。
      *
+     * <p><b>先预检，再动方块。</b>要摆的格子上压着箱子、刷怪笼这类带方块实体的东西，
+     * 或者（完整版的）框架 / 台阶位置上压着别人的方块，就整套放弃、一根方块都不碰 ——
+     * 以前是"门洞跳过带实体的格子、摆放照写不误"，箱子被门面方块顶掉，里面的东西一起没了。</p>
+     *
      * <p>全程持有 {@code building} 标志：建门期间被覆盖的方块不算"玩家拆门"，
      * 否则后建的那一端会把先建的那一端拆掉（见 {@link #building}）。</p>
      *
      * @param platform {@code true} 为「单级台阶 + 门框 + 门面」；
      *                 {@code false} 为紧凑版（只有门框 + 门面），给地牢这种室内空间用
+     * @return {@code false} 表示这块地不能用、已经整套放弃（没有改动任何方块）
      */
-    private static void placeStructure(ServerLevel level, BlockPos origin, Direction front,
-                                       BlockPos partnerOrigin, Direction partnerFront,
-                                       UUID creator, int uses, boolean platform) {
+    private static boolean placeStructure(ServerLevel level, BlockPos origin, Direction front,
+                                          BlockPos partnerOrigin, Direction partnerFront,
+                                          UUID creator, int uses, boolean platform) {
         boolean previousBuilding = building;
         building = true;
         try {
             ensureChunks(level, origin, front);
 
+            // 门面带上 FACING：薄片模型按它转到门框平面上，否则朝东西的门会看到薄片横穿门洞
+            BlockState portalState = SmallTools.REMOTE_PORTAL.get().defaultBlockState()
+                    .setValue(RemotePortalBlock.FACING, front);
+
+            if (!siteBuildable(level, origin, front, platform)) {
+                return false;
+            }
+
+            // 预检已保证这些格子上没有方块实体，可以放心挖空
             BlockState air = Blocks.AIR.defaultBlockState();
             // Clear only the doorway and the two-wide approach. Never excavate a platform.
             // 只清门洞本身（局部 z=0），不要把门外那格台阶所在的位置也清掉
             for (int lx = 1; lx <= PORTAL_WIDTH; lx++) {
                 for (int ly = 1; ly <= PORTAL_HEIGHT; ly++) {
-                    BlockPos pos = localPos(origin, front, lx, ly, 0);
-                    if (level.getBlockEntity(pos) == null) {
-                        level.setBlockAndUpdate(pos, air);
-                    }
+                    level.setBlockAndUpdate(localPos(origin, front, lx, ly, 0), air);
                 }
             }
 
             // 2) 摆放
-            // 门面带上 FACING：薄片模型按它转到门框平面上，否则朝东西的门会看到薄片横穿门洞
-            BlockState portalState = SmallTools.REMOTE_PORTAL.get().defaultBlockState()
-                    .setValue(RemotePortalBlock.FACING, front);
             for (Piece piece : pieces(origin, front, portalState, platform)) {
                 level.setBlockAndUpdate(piece.pos(), piece.state());
                 if (piece.state().is(SmallTools.REMOTE_PORTAL.get())
@@ -1150,9 +1273,42 @@ public final class PortalManager {
 
             level.playSound(null, localPos(origin, front, 2, 2, 1), SoundEvents.PORTAL_AMBIENT,
                     SoundSource.BLOCKS, 0.6F, 1.2F);
+            return true;
         } finally {
             building = previousBuilding;
         }
+    }
+
+    /**
+     * 这块地能不能直接铺我们这套方块（摆放前的预检）。
+     *
+     * <p>两条底线：</p>
+     * <ul>
+     *   <li>任何要摆的格子上有<b>方块实体</b>（箱子、木桶、刷怪笼、告示牌……）—— 直接否。
+     *       容器被覆盖时里面的东西不会掉出来，等于凭空吞掉玩家的物资；</li>
+     *   <li>完整版（带台阶那种）的<b>框架和台阶</b>位置上压着别人的方块 —— 也否。
+     *       门洞那 6 格是我们自己挖空的，{@code platform=false} 的地牢端门框本来就是要
+     *       嵌进墙里，这两类不挡（否则地牢门永远开不出来）。</li>
+     * </ul>
+     */
+    private static boolean siteBuildable(ServerLevel level, BlockPos origin, Direction front, boolean platform) {
+        BlockState portalState = SmallTools.REMOTE_PORTAL.get().defaultBlockState();
+        for (Piece piece : pieces(origin, front, portalState, platform)) {
+            if (level.getBlockEntity(piece.pos()) != null) {
+                return false;
+            }
+            if (!platform || piece.state().is(SmallTools.REMOTE_PORTAL.get())) {
+                continue;
+            }
+            BlockState current = level.getBlockState(piece.pos());
+            // 树叶放行：树冠低垂是常态，为两格顶梁把整片树林判成"不能建"太严了。
+            // 以前的行为就是把树叶铲平，这里保持同样的宽容度。
+            if (!current.isAir() && !current.canBeReplaced()
+                    && !isOwnBlock(current) && !current.is(BlockTags.LEAVES)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -1313,9 +1469,9 @@ public final class PortalManager {
      * 紧凑版的方块本来就是完整版的子集，多出来的高台 / 台阶位置在地牢里是圆石，
      * 会被 {@link #isOwnBlock} 过滤掉，不会误伤。</p>
      *
-     * @param skip 正在被移除的方块（重入时跳过，避免在同一位置二次 setBlock）
+     * @param skip 正在被移除的方块（重入时跳过，避免在同一位置二次 setBlock）；无则 {@code null}
      */
-    public static void destroyStructure(ServerLevel level, BlockPos origin, Direction front, BlockPos skip) {
+    public static void destroyStructure(ServerLevel level, BlockPos origin, Direction front, @Nullable BlockPos skip) {
         ensureChunks(level, origin, front);
 
         BlockState air = Blocks.AIR.defaultBlockState();
@@ -1325,7 +1481,7 @@ public final class PortalManager {
         // Old dungeon entrances had no platform. Do not extend demolition over their floor.
         boolean oldPlatform = legacy && level.getBlockState(localPos(origin, front, 1, -1, 2))
                 .is(Blocks.POLISHED_BLACKSTONE_STAIRS);
-        boolean stairs = source != null && source.hasEntryStep();
+        boolean stairs = source != null ? source.hasEntryStep() : hasEntryStep(level, origin, front);
         BlockState portalState = SmallTools.REMOTE_PORTAL.get().defaultBlockState();
         if (legacy) {
             for (int lx = 0; lx < FRAME_WIDTH; lx++) {
@@ -1352,6 +1508,23 @@ public final class PortalManager {
         level.sendParticles(ParticleTypes.PORTAL,
                 localX(origin, front, 2.0D, 1.5D), origin.getY() + 2.0D, localZ(origin, front, 2.0D, 1.5D),
                 40, 0.6D, 1.0D, 0.2D, 0.3D);
+    }
+
+    /**
+     * 现场还有没有那一节台阶。
+     *
+     * <p>门方块实体全没了的时候（门面被玩家拆光），问不出这端原本是不是带台阶，
+     * 只能看两格台阶位置上还立不立着我们的楼梯；有就按"带台阶"的清单拆，
+     * 免得留下两格孤儿楼梯。</p>
+     */
+    private static boolean hasEntryStep(ServerLevel level, BlockPos origin, Direction front) {
+        for (int lx = 1; lx <= PORTAL_WIDTH; lx++) {
+            if (level.getBlockState(localPos(origin, front, lx, 0, STEP_COUNT))
+                    .is(Blocks.POLISHED_BLACKSTONE_STAIRS)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 只拆自己放下去的东西，别误伤玩家建筑。 */

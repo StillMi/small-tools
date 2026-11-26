@@ -43,6 +43,15 @@ public final class EnhanceTooltip {
             return;
         }
 
+        // 和界面用同一套判断：附魔已经被外部改成补无可补、升无可升时，
+        // 界面那边也强化不了，这里就不要再承诺“下一次需要 X 经验”，
+        // 否则玩家会照着提示继续投材料，投进去却永远用不掉。
+        if (!EnhancerMenu.isEnhanceable(stack) || !EnhancerMenu.hasWork(stack)) {
+            tooltip.add(Component.translatable("tooltip.smalltools.enhanced.stuck")
+                    .withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC));
+            return;
+        }
+
         // 还没满时显示下一次的代价，方便直接判断值不值得
         int xp = EnhancerMenu.xpForStep(used + 1);
         int lapis = EnhancerMenu.lapisForStep(used + 1);

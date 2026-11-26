@@ -19,3 +19,5 @@ logs/
 # Python
 __pycache__/
 *.pyc
+commit-msg.txt
+build/*.py
